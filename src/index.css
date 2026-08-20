@@ -1,0 +1,177 @@
+@import "tailwindcss";
+
+/* Base Typography Enhancement for Optimal Readability */
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  color: #1e293b;
+  line-height: 1.6;
+}
+
+/* FullCalendar Modern & Easy-to-Read Light Theme */
+.fc {
+  --fc-page-bg-color: transparent;
+  --fc-neutral-bg-color: #f8fafc;
+  --fc-list-event-hover-bg-color: #f1f5f9;
+  --fc-theme-standard-border-color: #e2e8f0;
+  --fc-border-color: #e2e8f0;
+  font-family: inherit;
+}
+
+.fc .fc-toolbar {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  flex-wrap: wrap !important;
+  gap: 0.75rem 1rem !important;
+  margin-bottom: 1.25rem !important;
+  overflow: visible !important;
+}
+
+.fc .fc-toolbar-chunk {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.75rem !important;
+  flex-wrap: wrap !important;
+  overflow: visible !important;
+}
+
+.fc .fc-toolbar-title {
+  font-size: 1.05rem !important;
+  font-weight: 700 !important;
+  color: #0f172a !important; /* Bold dark slate for month/year title */
+  letter-spacing: -0.01em;
+  margin: 0 !important;
+  padding: 0 !important;
+  white-space: nowrap !important;
+  word-break: keep-all !important;
+  overflow-wrap: normal !important;
+  line-height: 1.3 !important;
+}
+
+.fc .fc-button-group {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.35rem !important;
+  background-color: #f1f5f9;
+  padding: 3px;
+  border-radius: 0.85rem !important;
+  border: 1px solid #e2e8f0;
+}
+
+.fc .fc-button-group > .fc-button {
+  border-radius: 0.65rem !important;
+  margin: 0 !important;
+}
+
+.fc .fc-button-primary {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background-color: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #334155 !important;
+  font-size: 0.875rem !important;
+  font-weight: 700 !important;
+  border-radius: 0.65rem !important;
+  padding: 0.35rem 0.85rem !important;
+  height: 34px !important;
+  line-height: 1 !important;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.04) !important;
+  transition: all 0.15s ease !important;
+  white-space: nowrap !important;
+  cursor: pointer !important;
+}
+
+.fc .fc-button-primary.fc-prev-button,
+.fc .fc-button-primary.fc-next-button {
+  width: 34px !important;
+  padding: 0 !important;
+}
+
+.fc .fc-button-primary.fc-today-button {
+  padding: 0 0.85rem !important;
+  font-size: 0.85rem !important;
+}
+
+.fc .fc-button-primary .fc-icon {
+  font-size: 1.05em !important;
+  vertical-align: middle;
+}
+
+.fc .fc-button-primary:hover {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+  border-color: #94a3b8 !important;
+}
+
+.fc .fc-button-primary:disabled {
+  opacity: 0.4;
+}
+
+.fc .fc-col-header-cell-cushion {
+  color: #334155 !important;
+  font-size: 0.875rem !important;
+  font-weight: 700 !important;
+  padding: 12px 0 !important;
+}
+
+.fc .fc-daygrid-day-number {
+  color: #334155 !important;
+  font-size: 0.875rem !important;
+  font-weight: 700 !important;
+  padding: 8px 12px !important;
+}
+
+.fc-theme-standard td, .fc-theme-standard th {
+  border-color: #f1f5f9 !important;
+}
+
+.fc .fc-daygrid-day.fc-day-today {
+  background-color: rgba(16, 185, 129, 0.08) !important;
+}
+
+.fc .fc-event {
+  cursor: pointer;
+  border-radius: 8px !important;
+  padding: 4px 6px !important;
+  font-size: 0.85rem !important;
+  font-weight: 700 !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06) !important;
+  transition: transform 0.1s ease !important;
+  margin-top: 3px !important;
+  margin-bottom: 3px !important;
+  overflow: hidden !important;
+}
+
+.fc .fc-event:hover {
+  transform: translateY(-1px);
+}
+
+.field-input {
+  width: 100%;
+  border: 1px solid #e2e8f0;
+  border-radius: 1rem;
+  background: #fff;
+  padding: 0.75rem 1rem;
+  color: #0f172a;
+  font-size: 0.875rem;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.field-input::placeholder {
+  color: #94a3b8;
+}
+
+.field-input:focus {
+  outline: none;
+  border-color: #059669;
+  box-shadow: 0 0 0 1px #059669;
+}
+

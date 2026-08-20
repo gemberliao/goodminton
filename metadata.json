@@ -1,0 +1,6 @@
+{
+  "name": "GOODMINTON",
+  "description": "GOODMINTON 羽球隊智慧管理系統，支援報名出席、全功能月曆、5點團體賽排單與出賽意願調查、公積金流水帳與智慧分攤引擎。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
