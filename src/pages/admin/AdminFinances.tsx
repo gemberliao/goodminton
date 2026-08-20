@@ -38,6 +38,7 @@ export const AdminFinances: React.FC = () => {
     profiles, 
     addFeeCollection, 
     updateFeeCollection,
+    addUsersToFeeCollection,
     deleteFeeCollection,
     confirmFeePayment,
     rejectFeePayment,
@@ -127,6 +128,35 @@ export const AdminFinances: React.FC = () => {
 
   // Editing Fee Collection modal state
   const [editingCollection, setEditingCollection] = useState<FeeCollection | null>(null);
+  const [editingNewMemberIds, setEditingNewMemberIds] = useState<string[]>([]);
+
+  const editingCollectionMemberIds = React.useMemo(
+    () => new Set(
+      editingCollection
+        ? feeRecords
+            .filter((record) => record.collection_id === editingCollection.id)
+            .map((record) => record.user_id)
+        : []
+    ),
+    [editingCollection?.id, feeRecords]
+  );
+  const addableEditingProfiles = React.useMemo(
+    () => profiles.filter((profile) => !editingCollectionMemberIds.has(profile.id)),
+    [editingCollectionMemberIds, profiles]
+  );
+
+  const handleOpenFeeCollectionEditor = (collection: FeeCollection) => {
+    setEditingCollection(collection);
+    setEditingNewMemberIds([]);
+  };
+
+  const handleToggleEditingMember = (userId: string) => {
+    setEditingNewMemberIds((current) => (
+      current.includes(userId)
+        ? current.filter((id) => id !== userId)
+        : [...current, userId]
+    ));
+  };
 
   // Splitter Engine state
   const [splitTitle, setSplitTitle] = useState('8月比賽用球與場租平分專案');
@@ -727,7 +757,7 @@ export const AdminFinances: React.FC = () => {
                         ) : (
                           <button
                             type="button"
-                            onClick={() => setEditingCollection(currentCollection)}
+                            onClick={() => handleOpenFeeCollectionEditor(currentCollection)}
                             className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs rounded-xl font-bold border border-amber-200 transition-colors cursor-pointer"
                           >
                             調整截止日後重啟
@@ -736,7 +766,7 @@ export const AdminFinances: React.FC = () => {
 
                         <button
                           type="button"
-                          onClick={() => setEditingCollection(currentCollection)}
+                          onClick={() => handleOpenFeeCollectionEditor(currentCollection)}
                           className="p-2 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors border border-transparent hover:border-emerald-200 cursor-pointer"
                           title="編輯專案"
                         >
@@ -1266,16 +1296,31 @@ export const AdminFinances: React.FC = () => {
               onSubmit={async (e) => {
                 e.preventDefault();
                 if (!editingCollection) return;
+                setBusyItemId(editingCollection.id);
                 const result = await updateFeeCollection(editingCollection.id, {
                   title: editingCollection.title,
                   amount_per_person: Number(editingCollection.amount_per_person),
                   due_date: editingCollection.due_date,
                   status: editingCollection.status
                 });
-                if (result.success) {
-                  showSuccessNotice(`已更新收費專案「${editingCollection.title}」。`);
-                  setEditingCollection(null);
+                if (!result.success) {
+                  setBusyItemId(null);
+                  return;
                 }
+
+                const addMembersResult = await addUsersToFeeCollection(
+                  editingCollection.id,
+                  editingNewMemberIds
+                );
+                setBusyItemId(null);
+                if (!addMembersResult.success) return;
+
+                const addedMessage = editingNewMemberIds.length > 0
+                  ? `，並新增 ${editingNewMemberIds.length} 位收費隊員`
+                  : '';
+                showSuccessNotice(`已更新收費專案「${editingCollection.title}」${addedMessage}。`);
+                setEditingCollection(null);
+                setEditingNewMemberIds([]);
               }}
               className="space-y-4"
             >
@@ -1327,6 +1372,56 @@ export const AdminFinances: React.FC = () => {
                 </select>
               </div>
 
+              <div className="space-y-2.5 rounded-2xl border border-emerald-100 bg-emerald-50/50 p-3.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <label className="flex items-center gap-1.5 text-sm font-bold text-slate-800">
+                      <Users className="h-4 w-4 text-emerald-600" />
+                      <span>加入收費隊員</span>
+                    </label>
+                    <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                      已有 {editingCollectionMemberIds.size} 人；新加入者會收到一筆 ${Number(editingCollection.amount_per_person) || 0} 的未繳帳單，原有繳費紀錄不受影響。
+                    </p>
+                  </div>
+                  {editingNewMemberIds.length > 0 && (
+                    <span className="shrink-0 rounded-full bg-emerald-600 px-2.5 py-1 text-xs font-bold text-white">
+                      新增 {editingNewMemberIds.length} 人
+                    </span>
+                  )}
+                </div>
+
+                {addableEditingProfiles.length === 0 ? (
+                  <div className="rounded-xl border border-emerald-100 bg-white px-3 py-2.5 text-center text-xs font-medium text-slate-500">
+                    所有目前隊員都已經在這個收費專案中。
+                  </div>
+                ) : (
+                  <div className="grid max-h-44 grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3">
+                    {addableEditingProfiles.map((profile) => {
+                      const selected = editingNewMemberIds.includes(profile.id);
+                      return (
+                        <button
+                          key={profile.id}
+                          type="button"
+                          onClick={() => handleToggleEditingMember(profile.id)}
+                          className={`flex min-w-0 items-center gap-2 rounded-xl border px-2.5 py-2 text-left text-xs font-bold transition-colors ${
+                            selected
+                              ? 'border-emerald-300 bg-emerald-100 text-emerald-900'
+                              : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-200'
+                          }`}
+                        >
+                          <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                            selected ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-300'
+                          }`}>
+                            {selected && <Check className="h-3 w-3" />}
+                          </span>
+                          <span className="truncate">{profile.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
               <div className="pt-4 mt-2 border-t border-slate-100 flex items-center justify-between gap-2 shrink-0">
                 <button
                   type="button"
@@ -1352,9 +1447,10 @@ export const AdminFinances: React.FC = () => {
                   </button>
                   <button
                     type="submit"
+                    disabled={busyItemId === editingCollection.id}
                     className="px-4 sm:px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs sm:text-sm shadow-xs transition-colors cursor-pointer active:scale-95"
                   >
-                    儲存變更
+                    {busyItemId === editingCollection.id ? '儲存中…' : '儲存變更'}
                   </button>
                 </div>
               </div>

@@ -153,6 +153,15 @@ body {
   transform: translateY(-1px);
 }
 
+/* Keep two-character event type labels readable inside narrow mobile day cells. */
+@media (max-width: 639px) {
+  .member-calendar .fc .fc-event {
+    margin-left: 3px !important;
+    margin-right: 3px !important;
+    padding: 3px 1px !important;
+  }
+}
+
 .field-input {
   width: 100%;
   border: 1px solid #e2e8f0;
@@ -174,4 +183,3 @@ body {
   border-color: #059669;
   box-shadow: 0 0 0 1px #059669;
 }
-

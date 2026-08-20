@@ -238,6 +238,18 @@ async function syncFeeCollectionInsert(collection: FeeCollection, records: FeeRe
   }
 }
 
+async function syncFeeRecordInsert(records: FeeRecord[]): Promise<SyncResult> {
+  if (!getSupabaseConfig().isConfigured || records.length === 0) return { success: true };
+  try {
+    // Use INSERT instead of UPSERT so an existing paid record can never be
+    // overwritten when an administrator adds members to a collection.
+    const { error } = await supabase.from('fee_records').insert(records);
+    return error ? reportSupabaseError('新增收費隊員', error) : { success: true };
+  } catch (error: unknown) {
+    return reportSupabaseError('新增收費隊員', error);
+  }
+}
+
 async function syncFeeRecordUpdate(recordId: string, updates: Partial<FeeRecord>): Promise<SyncResult> {
   if (!getSupabaseConfig().isConfigured) return { success: true };
   try {
@@ -419,6 +431,7 @@ interface AppState {
     dueDate?: string
   ) => Promise<SyncResult>;
   updateFeeCollection: (id: string, updates: Partial<FeeCollection>) => Promise<SyncResult>;
+  addUsersToFeeCollection: (collectionId: string, userIds: string[]) => Promise<SyncResult>;
   deleteFeeCollection: (id: string) => Promise<SyncResult>;
   reportFeePayment: (recordId: string, notes?: string) => Promise<SyncResult>;
   confirmFeePayment: (recordId: string) => Promise<SyncResult>;
@@ -1135,6 +1148,46 @@ export const useAppStore = create<AppState>()(
             feeCollections: state.feeCollections.map((collection) =>
               collection.id === id ? previousCollection : collection
             )
+          }));
+        }
+        return sync;
+      },
+
+      addUsersToFeeCollection: async (collectionId, userIds) => {
+        const currentState = get();
+        if (!currentState.feeCollections.some((collection) => collection.id === collectionId)) {
+          return { success: false, message: '找不到要加入隊員的收費專案，請重新整理後再試。' };
+        }
+
+        const existingUserIds = new Set(
+          currentState.feeRecords
+            .filter((record) => record.collection_id === collectionId)
+            .map((record) => record.user_id)
+        );
+        const validProfileIds = new Set(currentState.profiles.map((profile) => profile.id));
+        const newUserIds = [...new Set(userIds)].filter(
+          (userId) => validProfileIds.has(userId) && !existingUserIds.has(userId)
+        );
+
+        if (newUserIds.length === 0) return { success: true };
+
+        const newRecords: FeeRecord[] = newUserIds.map((userId) => ({
+          id: generateUUID(),
+          collection_id: collectionId,
+          user_id: userId,
+          is_paid: false,
+          payment_status: 'unpaid',
+          created_at: new Date().toISOString()
+        }));
+        const newRecordIds = new Set(newRecords.map((record) => record.id));
+
+        set((state) => ({
+          feeRecords: deduplicateById([...state.feeRecords, ...newRecords])
+        }));
+        const sync = await syncFeeRecordInsert(newRecords);
+        if (!sync.success) {
+          set((state) => ({
+            feeRecords: state.feeRecords.filter((record) => !newRecordIds.has(record.id))
           }));
         }
         return sync;

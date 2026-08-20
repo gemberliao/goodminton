@@ -41,29 +41,28 @@ export const MemberCalendar: React.FC = () => {
     setLeaveReason(myAtt?.remarks || '');
   };
 
-  // Convert events to calendar items with user status color
+  // Convert events to calendar items. Color indicates attendance status,
+  // while the visible label identifies the event type.
   const calendarEvents = events.map((e) => {
     const myAtt = attendance.find((a) => a.user_id === currentUser.id && a.event_id === e.id);
     const status = myAtt?.status || 'pending';
+    const eventTypeLabel = Array.from(e.event_type || '活動').slice(0, 2).join('');
 
     let color = '#475569'; // pending slate
-    let statusLabel = '未點名';
     if (status === 'attending') {
       color = '#059669'; // emerald
-      statusLabel = '出席';
     }
     if (status === 'absent') {
       color = '#e11d48'; // rose
-      statusLabel = '請假';
     }
 
     return {
       id: e.id,
-      title: e.title,
+      title: `${eventTypeLabel}｜${e.title}`,
       date: e.event_date,
       backgroundColor: color,
       borderColor: 'transparent',
-      extendedProps: { event: e, status, statusLabel }
+      extendedProps: { event: e, status, eventTypeLabel }
     };
   });
 
@@ -84,7 +83,7 @@ export const MemberCalendar: React.FC = () => {
       </div>
 
       {/* FullCalendar Component */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl p-3 sm:p-6 shadow-2xs text-slate-800">
+      <div className="member-calendar bg-white border border-slate-200/80 rounded-2xl p-3 sm:p-6 shadow-2xs text-slate-800">
         <FullCalendar
           plugins={[dayGridPlugin, interactionPlugin]}
           initialView="dayGridMonth"
@@ -102,9 +101,9 @@ export const MemberCalendar: React.FC = () => {
             today: '今天'
           }}
           eventContent={(eventInfo) => {
-            const { status, statusLabel, event: evt } = eventInfo.event.extendedProps as {
+            const { status, eventTypeLabel, event: evt } = eventInfo.event.extendedProps as {
               status: AttendanceStatus | 'pending';
-              statusLabel: string;
+              eventTypeLabel: string;
               event: BadmintonEvent;
             };
 
@@ -113,11 +112,11 @@ export const MemberCalendar: React.FC = () => {
             if (status === 'absent') badgeStyle = 'bg-rose-800/95 text-white';
 
             return (
-              <div className="flex items-center space-x-1.5 w-full min-w-0 px-1.5 py-1 overflow-hidden leading-snug">
-                <span className={`px-2 py-0.5 rounded-md text-xs font-black shrink-0 whitespace-nowrap ${badgeStyle}`}>
-                  {statusLabel}
+              <div className="flex w-full min-w-0 items-center justify-center overflow-hidden py-0.5 leading-none sm:justify-start sm:gap-1.5 sm:px-1.5 sm:py-1 sm:leading-snug">
+                <span className={`inline-flex min-w-[1.75rem] shrink-0 items-center justify-center whitespace-nowrap rounded-md px-1 py-1 text-[10px] font-black sm:min-w-0 sm:px-2 sm:py-0.5 sm:text-xs ${badgeStyle}`}>
+                  {eventTypeLabel}
                 </span>
-                <span className="font-bold text-xs sm:text-sm truncate whitespace-nowrap text-white">
+                <span className="hidden min-w-0 truncate whitespace-nowrap text-xs font-bold text-white sm:inline sm:text-sm">
                   {evt.title}
                 </span>
               </div>
