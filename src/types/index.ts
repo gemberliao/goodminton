@@ -35,6 +35,12 @@ export interface BadmintonEvent {
 
 export type AttendanceStatus = 'attending' | 'absent' | 'pending';
 
+export interface Announcement {
+  id: string;
+  body: string;
+  updated_at: string;
+}
+
 export interface AttendanceRecord {
   id: string;
   user_id: string;

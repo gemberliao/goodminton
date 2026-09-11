@@ -26,6 +26,7 @@ View your app in AI Studio: https://ai.studio/apps/6c07d15e-9e6d-49d0-9c29-f8e8b
 - Follow `SUPABASE_AUTH_MIGRATION.md` first so at least one approved administrator is linked to Supabase Auth.
 - Run `supabase_diagnostics.sql` to inspect the remote schema, Auth links, RLS, policies, grants, foreign keys, and duplicate logical keys.
 - Run `supabase_schema.sql` for the idempotent Auth schema and secure RLS repair.
+- Run `supabase_announcements.sql` after the main schema to enable one shared free-text announcement. Admins replace or clear its text; approved members read it on their dashboard. The migration adds only the announcement table and its access/sync settings. No calendar, pinning, or announcement history is involved.
 - Deploy `supabase/functions/admin-reset-password` and the public-entry `supabase/functions/login-with-account`; the first handles approved administrator account management, while the second resolves usernames to the linked Auth identity on the server without exposing the service-role key.
 - Run `supabase_write_probe.sql` to verify anon denial, admin CRUD, member ownership and deadline locks in a transaction that is rolled back.
 - If Auth registration reports `Database error saving new user`, run `supabase_auth_signup_repair.sql`, then retry with a non-empty unique username.

@@ -3,7 +3,7 @@ import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import { useAppStore } from '../../store/useAppStore';
-import { BadmintonEvent, AttendanceStatus } from '../../types';
+import { BadmintonEvent } from '../../types';
 import { isEventPast, formatTimeRange } from '../../utils/dateUtils';
 import { Calendar as CalendarIcon, CheckCircle, XCircle, Clock, MapPin, DollarSign, X, Lock, FileText } from 'lucide-react';
 
@@ -42,11 +42,10 @@ export const MemberCalendar: React.FC = () => {
   };
 
   // Convert events to calendar items. Color indicates attendance status,
-  // while the visible label identifies the event type.
+  // while the visible label shows the complete event name.
   const calendarEvents = events.map((e) => {
     const myAtt = attendance.find((a) => a.user_id === currentUser.id && a.event_id === e.id);
     const status = myAtt?.status || 'pending';
-    const eventTypeLabel = Array.from(e.event_type || '活動').slice(0, 2).join('');
 
     let color = '#475569'; // pending slate
     if (status === 'attending') {
@@ -58,11 +57,11 @@ export const MemberCalendar: React.FC = () => {
 
     return {
       id: e.id,
-      title: `${eventTypeLabel}｜${e.title}`,
+      title: e.title,
       date: e.event_date,
       backgroundColor: color,
       borderColor: 'transparent',
-      extendedProps: { event: e, status, eventTypeLabel }
+      extendedProps: { event: e, status }
     };
   });
 
@@ -72,9 +71,6 @@ export const MemberCalendar: React.FC = () => {
       {/* Header */}
       <div>
         <div className="flex items-center space-x-2">
-          <span className="px-3 py-1 rounded-full text-xs sm:text-sm font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap shrink-0 inline-block">
-            隊員專區
-          </span>
           <h1 className="text-xl font-bold text-slate-900">球隊月曆與一鍵出席請假點名</h1>
         </div>
         <p className="text-xs text-slate-500 mt-1">
@@ -83,7 +79,7 @@ export const MemberCalendar: React.FC = () => {
       </div>
 
       {/* FullCalendar Component */}
-      <div className="member-calendar bg-white border border-slate-200/80 rounded-2xl p-3 sm:p-6 shadow-2xs text-slate-800">
+      <div className="event-calendar member-calendar bg-white border border-slate-200/80 rounded-2xl p-3 sm:p-6 shadow-2xs text-slate-800">
         <FullCalendar
           plugins={[dayGridPlugin, interactionPlugin]}
           initialView="dayGridMonth"
@@ -100,28 +96,6 @@ export const MemberCalendar: React.FC = () => {
           buttonText={{
             today: '今天'
           }}
-          eventContent={(eventInfo) => {
-            const { status, eventTypeLabel, event: evt } = eventInfo.event.extendedProps as {
-              status: AttendanceStatus | 'pending';
-              eventTypeLabel: string;
-              event: BadmintonEvent;
-            };
-
-            let badgeStyle = 'bg-slate-700/90 text-white';
-            if (status === 'attending') badgeStyle = 'bg-emerald-800/95 text-white';
-            if (status === 'absent') badgeStyle = 'bg-rose-800/95 text-white';
-
-            return (
-              <div className="flex w-full min-w-0 items-center justify-center overflow-hidden py-0.5 leading-none sm:justify-start sm:gap-1.5 sm:px-1.5 sm:py-1 sm:leading-snug">
-                <span className={`inline-flex min-w-[1.75rem] shrink-0 items-center justify-center whitespace-nowrap rounded-md px-1 py-1 text-[10px] font-black sm:min-w-0 sm:px-2 sm:py-0.5 sm:text-xs ${badgeStyle}`}>
-                  {eventTypeLabel}
-                </span>
-                <span className="hidden min-w-0 truncate whitespace-nowrap text-xs font-bold text-white sm:inline sm:text-sm">
-                  {evt.title}
-                </span>
-              </div>
-            );
-          }}
           height="auto"
         />
       </div>
@@ -132,7 +106,7 @@ export const MemberCalendar: React.FC = () => {
           <div className="bg-white border border-slate-200 text-slate-800 rounded-3xl w-full max-w-md p-6 shadow-xl space-y-5">
             
             <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
-              <span className="px-3 py-1 rounded-full text-xs sm:text-sm font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <span className="px-3 py-1 rounded-full text-xs sm:text-sm font-bold bg-emerald-50 text-emerald-700 ">
                 {selectedEvent.event_type}
               </span>
               <button
@@ -186,17 +160,17 @@ export const MemberCalendar: React.FC = () => {
                     您的登記記錄：
                     <span className="font-bold ml-2 inline-flex items-center">
                       {currentAtt?.status === 'attending' && (
-                        <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                        <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 ">
                           出席
                         </span>
                       )}
                       {currentAtt?.status === 'absent' && (
-                        <span className="px-3 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                        <span className="px-3 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 ">
                           請假 {currentAtt.remarks ? `(${currentAtt.remarks})` : ''}
                         </span>
                       )}
                       {(!currentAtt || currentAtt.status === 'pending') && (
-                        <span className="px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600 border border-slate-300">
+                        <span className="px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600 ">
                           未報名
                         </span>
                       )}

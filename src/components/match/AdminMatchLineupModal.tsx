@@ -232,7 +232,7 @@ export const AdminMatchLineupModal: React.FC<AdminMatchLineupModalProps> = ({
         {/* Modal Header */}
         <div className="shrink-0 mb-3 sm:mb-4 pr-8 sm:pr-0">
           <div className="flex items-center space-x-2 mb-1">
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200">
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 ">
               比賽排點管理
             </span>
             <span className="text-xs text-slate-500 font-medium">5 點團體賽制</span>
@@ -379,7 +379,7 @@ export const AdminMatchLineupModal: React.FC<AdminMatchLineupModalProps> = ({
                                 {currentUserId && (
                                   <div className="flex items-center space-x-1.5">
                                     {isWilling && (
-                                      <span className="text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md">
+                                      <span className="text-xs font-semibold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-md">
                                         ✓ 符合意願
                                       </span>
                                     )}
@@ -547,7 +547,7 @@ export const AdminMatchLineupModal: React.FC<AdminMatchLineupModalProps> = ({
                                 {profile?.name || '隊員'}
                               </span>
                               {isUnplayed && (
-                                <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-amber-50 text-amber-800 ">
                                   ★ 未曾出賽 (優先)
                                 </span>
                               )}
@@ -558,7 +558,7 @@ export const AdminMatchLineupModal: React.FC<AdminMatchLineupModalProps> = ({
                                 {profile?.gender === 'female' ? '女' : '男'}
                               </span>
                               {assigned > 0 && (
-                                <span className="text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md">
+                                <span className="text-xs font-semibold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-md">
                                   本場已排 {assigned} 點
                                 </span>
                               )}
@@ -567,7 +567,7 @@ export const AdminMatchLineupModal: React.FC<AdminMatchLineupModalProps> = ({
                             <div className="flex items-center gap-2 flex-wrap text-sm text-slate-600">
                               <span className="font-semibold text-slate-700">意願項目：</span>
                               {srv.preferred_disciplines.map(d => (
-                                <span key={d} className="px-2.5 py-0.5 bg-slate-100 text-slate-800 border border-slate-200 rounded-md font-semibold text-xs">
+                                <span key={d} className="px-2.5 py-0.5 bg-slate-100 text-slate-800 rounded-md font-semibold text-xs">
                                   {d}
                                 </span>
                               ))}
@@ -675,7 +675,7 @@ export const AdminMatchLineupModal: React.FC<AdminMatchLineupModalProps> = ({
                             </td>
                             <td className="p-3.5">
                               <span className={`px-2.5 py-0.5 rounded-full font-medium text-xs ${
-                                isAtt ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500'
+                                isAtt ? 'bg-emerald-50 text-emerald-700 ' : 'bg-slate-100 text-slate-500'
                               }`}>
                                 {isAtt ? '已報名出席' : '未報名'}
                               </span>
@@ -694,14 +694,14 @@ export const AdminMatchLineupModal: React.FC<AdminMatchLineupModalProps> = ({
                                 currentAssigned > 1
                                   ? 'bg-slate-200 text-slate-900'
                                   : currentAssigned === 1
-                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  ? 'bg-emerald-50 text-emerald-700 '
                                   : 'text-slate-400'
                               }`}>
                                 {currentAssigned}
                               </span>
                             </td>
                             <td className="p-3.5 text-center">
-                              <span className={`font-bold ${isUnplayed ? 'text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-md' : 'text-slate-800'}`}>
+                              <span className={`font-bold ${isUnplayed ? 'text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-md' : 'text-slate-800'}`}>
                                 {stats.historicalPlayedCount} 場
                               </span>
                             </td>

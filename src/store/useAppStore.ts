@@ -384,10 +384,12 @@ interface AppState {
   matchLineupConfigs: Record<string, MatchLineupConfig>; // event_id -> config
   viewedEventIdsByUser: Record<string, string[]>;
   viewedFeeRecordIdsByUser: Record<string, string[]>;
+  viewedAnnouncementUpdatedAtByUser: Record<string, string>;
   
   // Notification / View Tracking
   markEventsAsViewed: (userId: string) => void;
   markFinancesAsViewed: (userId: string) => void;
+  markAnnouncementAsViewed: (userId: string, updatedAt: string) => void;
   
   // Actions
   setCurrentUserRole: (role: 'admin' | 'member') => void;
@@ -482,6 +484,7 @@ export const useAppStore = create<AppState>()(
       matchLineupConfigs: initialMatchLineupConfigs,
       viewedEventIdsByUser: {},
       viewedFeeRecordIdsByUser: {},
+      viewedAnnouncementUpdatedAtByUser: {},
 
       markEventsAsViewed: (userId: string) => {
         if (!userId) return;
@@ -503,6 +506,16 @@ export const useAppStore = create<AppState>()(
           viewedFeeRecordIdsByUser: {
             ...state.viewedFeeRecordIdsByUser,
             [userId]: Array.from(new Set([...(state.viewedFeeRecordIdsByUser?.[userId] || []), ...currentRecordIds]))
+          }
+        }));
+      },
+
+      markAnnouncementAsViewed: (userId: string, updatedAt: string) => {
+        if (!userId || !updatedAt) return;
+        set((state) => ({
+          viewedAnnouncementUpdatedAtByUser: {
+            ...state.viewedAnnouncementUpdatedAtByUser,
+            [userId]: updatedAt
           }
         }));
       },
@@ -1460,7 +1473,8 @@ export const useAppStore = create<AppState>()(
         if (version < 3) {
           return {
             viewedEventIdsByUser: persistedState?.viewedEventIdsByUser || {},
-            viewedFeeRecordIdsByUser: persistedState?.viewedFeeRecordIdsByUser || {}
+            viewedFeeRecordIdsByUser: persistedState?.viewedFeeRecordIdsByUser || {},
+            viewedAnnouncementUpdatedAtByUser: persistedState?.viewedAnnouncementUpdatedAtByUser || {}
           };
         }
         return persistedState;
@@ -1482,7 +1496,8 @@ export const useAppStore = create<AppState>()(
         // prevents a member from seeing a previous admin's cached rows on a
         // shared browser before the new Auth/RLS-scoped fetch completes.
         viewedEventIdsByUser: state.viewedEventIdsByUser || {},
-        viewedFeeRecordIdsByUser: state.viewedFeeRecordIdsByUser || {}
+        viewedFeeRecordIdsByUser: state.viewedFeeRecordIdsByUser || {},
+        viewedAnnouncementUpdatedAtByUser: state.viewedAnnouncementUpdatedAtByUser || {}
       })
     }
   )

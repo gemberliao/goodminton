@@ -200,7 +200,7 @@ export const AdminEvents: React.FC = () => {
   // Convert store events to FullCalendar format
   const calendarEvents = uniqueEvents.map((e) => ({
     id: e.id,
-    title: `${e.event_type} - ${e.title}`,
+    title: e.title,
     date: e.event_date,
     backgroundColor:
       e.event_type === '練球'
@@ -219,9 +219,6 @@ export const AdminEvents: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <div className="flex items-center space-x-2.5">
-            <span className="px-3 py-1 rounded-full text-xs sm:text-sm font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap shrink-0 inline-block">
-              管理員專區
-            </span>
             <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">活動與行事曆管理</h1>
           </div>
           <p className="text-sm text-slate-500 mt-1.5">
@@ -268,7 +265,7 @@ export const AdminEvents: React.FC = () => {
 
       {/* Main View Container */}
       {viewMode === 'calendar' ? (
-        <div className="bg-white border border-slate-200/80 rounded-3xl p-4 sm:p-7 shadow-2xs text-slate-800">
+        <div className="event-calendar bg-white border border-slate-200/80 rounded-3xl p-4 sm:p-7 shadow-2xs text-slate-800">
           <FullCalendar
             plugins={[dayGridPlugin, interactionPlugin]}
             initialView="dayGridMonth"
@@ -295,7 +292,7 @@ export const AdminEvents: React.FC = () => {
             >
               <div className="flex items-start justify-between">
                 <div>
-                  <span className="px-3 py-0.5 text-xs font-bold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  <span className="px-3 py-0.5 text-xs font-bold rounded-full bg-emerald-50 text-emerald-700 ">
                     {evt.event_type}
                   </span>
                   <h3 className="text-lg font-bold text-slate-900 mt-1.5 tracking-tight">{evt.title}</h3>

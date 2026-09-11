@@ -47,9 +47,6 @@ export const MemberProfile: React.FC = () => {
       {/* Header */}
       <div>
         <div className="flex items-center space-x-2.5">
-          <span className="px-3 py-1 rounded-full text-xs sm:text-sm font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap shrink-0 inline-block">
-            隊員專區
-          </span>
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">個人資料與羽球技術分級</h1>
         </div>
         <p className="text-sm text-slate-500 mt-1.5">

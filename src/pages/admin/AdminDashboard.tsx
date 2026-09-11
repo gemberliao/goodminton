@@ -1,4 +1,6 @@
 import React from 'react';
+import { AnnouncementBoard } from '../../components/common/AnnouncementBoard';
+import { QuickDrawModal } from '../../components/common/QuickDrawModal';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../../store/useAppStore';
 import { formatTimeRange, isEventPast, formatEventDateTimeCN, formatFullDateCN } from '../../utils/dateUtils';
@@ -17,12 +19,14 @@ import {
   CheckCircle2,
   Clock,
   MapPin,
-  DollarSign
+  DollarSign,
+  Dices
 } from 'lucide-react';
 
 export const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { finances, events, attendance, feeCollections, feeRecords, profiles } = useAppStore();
+  const [isQuickDrawOpen, setIsQuickDrawOpen] = React.useState(false);
 
   // 1. Calculate Fund Ledger Balance
   const totalIncome = finances
@@ -71,12 +75,14 @@ export const AdminDashboard: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      
+
+      <AnnouncementBoard />
+
       {/* Page Title & Quick Actions Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs">
         <div>
           <div className="flex items-center space-x-2">
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 ">
               總覽控制台
             </span>
             <h1 className="text-xl font-bold text-slate-900 tracking-tight">球隊行政智慧總覽</h1>
@@ -86,7 +92,14 @@ export const AdminDashboard: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center space-x-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            onClick={() => setIsQuickDrawOpen(true)}
+            className="flex items-center space-x-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 px-3.5 py-2 text-xs font-semibold text-white shadow-xs transition-all hover:brightness-105 active:scale-98"
+          >
+            <Dices className="h-4 w-4" />
+            <span>雙打抽籤</span>
+          </button>
           <button
             onClick={() => navigate('/admin/events')}
             className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl text-xs flex items-center space-x-1.5 transition-all shadow-xs active:scale-98"
@@ -315,7 +328,7 @@ export const AdminDashboard: React.FC = () => {
             ) : (
               activeCollectionsWithStatus.map((col) => {
                 const progressPercent = Math.round((col.paidCount / col.totalCount) * 100) || 0;
-                const totalTargetAmount = col.total_amount || (col.amount_per_person * col.totalCount);
+                const totalReceivable = col.amount_per_person * col.totalCount;
                 const collectedAmount = col.paidCount * col.amount_per_person;
 
                 return (
@@ -323,13 +336,16 @@ export const AdminDashboard: React.FC = () => {
                     key={col.id}
                     className="bg-white border border-slate-200/80 rounded-2xl p-5 space-y-3.5 shadow-2xs hover:border-slate-300 transition-all"
                   >
-                    {/* Top Row: Type Pill Badge (Left) & Total Target Amount (Right) */}
+                    {/* Top Row: Type Pill Badge (Left) & Total Receivable (Right) */}
                     <div className="flex items-center justify-between">
                       <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100/90 text-slate-700">
                         {col.c_type === 'split' ? '出席均分' : '固定項目'}
                       </span>
-                      <div className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-                        ${totalTargetAmount.toLocaleString()}
+                      <div className="text-right">
+                        <div className="text-[11px] font-semibold text-slate-400">總應收</div>
+                        <div className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+                          ${totalReceivable.toLocaleString()}
+                        </div>
                       </div>
                     </div>
 
@@ -363,7 +379,8 @@ export const AdminDashboard: React.FC = () => {
 
       </div>
 
+      {isQuickDrawOpen && <QuickDrawModal profiles={profiles} onClose={() => setIsQuickDrawOpen(false)} />}
+
     </div>
   );
 };
-

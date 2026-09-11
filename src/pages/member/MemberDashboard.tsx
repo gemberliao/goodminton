@@ -1,4 +1,5 @@
 import React from 'react';
+import { AnnouncementBoard } from '../../components/common/AnnouncementBoard';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../../store/useAppStore';
 import { AttendanceStatus, BadmintonEvent } from '../../types';
@@ -109,7 +110,9 @@ export const MemberDashboard: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      
+
+      <AnnouncementBoard />
+
       {/* Welcome Banner */}
       <div className="relative bg-white border border-slate-200/90 rounded-[28px] sm:rounded-[32px] p-6 sm:p-7 shadow-[0_4px_24px_rgba(0,0,0,0.03)] overflow-hidden">
         {/* Top-right Decorative Diagonal Speed Lines */}
@@ -132,9 +135,6 @@ export const MemberDashboard: React.FC = () => {
         {/* Header Tag & Greeting */}
         <div className="relative z-10">
           <div className="flex items-center space-x-3 mb-2 flex-wrap gap-y-1.5">
-            <span className="px-3.5 py-0.5 sm:py-1 rounded-full text-xs sm:text-sm font-bold text-emerald-700 border border-emerald-500 bg-white inline-block">
-              隊員專區
-            </span>
             <span className="text-xs sm:text-sm md:text-base text-slate-600 font-medium tracking-tight">
               歡迎回到 GOODMINTON！
             </span>

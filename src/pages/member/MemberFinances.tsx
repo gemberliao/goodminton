@@ -76,9 +76,6 @@ export const MemberFinances: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center space-x-2.5">
-            <span className="px-3 py-1 rounded-full text-xs sm:text-sm font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap shrink-0 inline-block">
-              隊員專區
-            </span>
             <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">個人帳單與繳費紀錄</h1>
           </div>
           <p className="text-sm text-slate-500 mt-1.5">
@@ -127,7 +124,7 @@ export const MemberFinances: React.FC = () => {
 
       {/* Global Toast Notice */}
       {noticeMessage && (
-        <div className="p-4 bg-amber-50 border border-amber-200 text-amber-900 text-sm font-medium rounded-2xl flex items-center space-x-2.5 animate-in fade-in shadow-2xs">
+        <div className="p-4 bg-amber-50 border border-amber-200 text-slate-800 text-sm font-medium rounded-2xl flex items-center space-x-2.5 animate-in fade-in shadow-2xs">
           <Send className="w-5 h-5 text-amber-600 shrink-0" />
           <span>{noticeMessage}</span>
         </div>
@@ -149,11 +146,23 @@ export const MemberFinances: React.FC = () => {
 
         <div className="flex flex-col sm:items-end gap-2 pt-2.5 sm:pt-0 border-t sm:border-t-0 border-slate-100">
           <div className="flex items-center space-x-2 text-xs">
-            <span className="px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 font-bold border border-rose-200/80">
-              {strictlyUnpaidRecords.length} 筆未繳
+            <span className={`px-2.5 py-1 rounded-lg font-semibold ${
+              strictlyUnpaidRecords.length > 0
+                ? 'bg-rose-50 text-rose-700/80'
+                : 'bg-slate-100 text-slate-500'
+            }`}>
+              <span className="font-bold">
+                {strictlyUnpaidRecords.length}
+              </span> 筆未繳
             </span>
-            <span className="px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 font-bold border border-amber-200/80">
-              {pendingRecords.length} 筆待審核對帳
+            <span className={`px-2.5 py-1 rounded-lg font-semibold ${
+              pendingRecords.length > 0
+                ? 'bg-amber-50 text-amber-700/80'
+                : 'bg-slate-100 text-slate-500'
+            }`}>
+              <span className="font-bold">
+                {pendingRecords.length}
+              </span> 筆待審核對帳
             </span>
           </div>
           <div className="text-xs text-slate-500 font-medium">
@@ -185,8 +194,6 @@ export const MemberFinances: React.FC = () => {
                   className={`bg-white border rounded-3xl p-6 sm:p-7 shadow-2xs transition-all ${
                     isLocked
                       ? 'border-slate-300 bg-slate-50/70'
-                      : isPending
-                      ? 'border-amber-300 bg-amber-50/30'
                       : 'border-slate-200/80 hover:border-slate-300'
                   }`}
                 >
@@ -194,12 +201,12 @@ export const MemberFinances: React.FC = () => {
                     {/* Info Section */}
                     <div className="space-y-2.5">
                       <div className="flex items-center space-x-2.5 flex-wrap gap-y-1">
-                        <span className={`px-3 py-0.5 rounded-full text-xs font-bold whitespace-nowrap ${
+                        <span className={`px-3 py-1 rounded-lg text-xs font-bold whitespace-nowrap ${
                           isLocked
-                            ? 'bg-slate-200 text-slate-700 border border-slate-300'
-                            : isPending 
-                            ? 'bg-amber-100 text-amber-800 border border-amber-300' 
-                            : 'bg-rose-50 text-rose-700 border border-rose-200'
+                            ? 'bg-slate-200 text-slate-600'
+                            : isPending
+                            ? 'bg-amber-100 text-amber-700/80'
+                            : 'bg-rose-50 text-rose-700/80'
                         }`}>
                           {isLocked ? '已截止未繳' : isPending ? '待對帳審核' : '未繳款'}
                         </span>
@@ -220,14 +227,14 @@ export const MemberFinances: React.FC = () => {
                       </div>
 
                       {isLocked && (
-                        <div className="text-xs sm:text-sm text-slate-700 font-bold bg-slate-100 p-3 rounded-2xl border border-slate-200 flex items-center space-x-2 mt-2">
+                        <div className="text-xs sm:text-sm text-slate-700 font-bold bg-slate-100 p-3 rounded-2xl flex items-center space-x-2 mt-2">
                           <Lock className="w-4 h-4 text-slate-500 shrink-0" />
                           <span>本專案已截止或結案，無法再送出或取消匯款回報，請直接聯絡管理員處理。</span>
                         </div>
                       )}
 
                       {isPending && !isLocked && (
-                        <div className="text-xs sm:text-sm text-amber-800 font-bold bg-amber-100/70 p-3 rounded-2xl border border-amber-200/80 flex items-center space-x-2 mt-2">
+                        <div className="text-xs sm:text-sm text-slate-800 font-bold bg-slate-100 p-3 rounded-2xl flex items-center space-x-2 mt-2">
                           <Send className="w-4 h-4 text-amber-600 shrink-0" />
                           <span>已發送匯款回報，等待管理員核對入帳中</span>
                         </div>
@@ -245,7 +252,7 @@ export const MemberFinances: React.FC = () => {
 
                       {isPending ? (
                         <div className="flex items-center space-x-2">
-                          <span className="px-4 py-2.5 bg-amber-100 text-amber-800 font-bold rounded-xl text-xs sm:text-sm flex items-center space-x-1.5 border border-amber-300">
+                          <span className="px-4 py-2.5 bg-slate-100 text-slate-800 font-bold rounded-xl text-xs sm:text-sm flex items-center space-x-1.5">
                             <Clock className="w-4 h-4 text-amber-600 animate-pulse shrink-0" />
                             <span className="whitespace-nowrap">待對帳中</span>
                           </span>
@@ -304,7 +311,7 @@ export const MemberFinances: React.FC = () => {
                 <div key={r.id} className="bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-7 shadow-2xs flex items-center justify-between gap-4">
                   <div className="space-y-1.5">
                     <div className="flex items-center space-x-2.5">
-                      <span className="px-3 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap shrink-0">
+                      <span className="px-3 py-1 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-700/80 whitespace-nowrap shrink-0">
                         已對帳付清
                       </span>
                       <h3 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">{collection.title}</h3>

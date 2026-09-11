@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation, NavLink } from 'react-router-dom';
 import { useAppStore } from '../../store/useAppStore';
+import { isAnnouncementUnread, useAnnouncementStore } from '../../store/useAnnouncementStore';
+import { ShuttleSmashGameModal } from '../common/ShuttleSmashGameModal';
 import { supabase } from '../../lib/supabase';
 import { 
   Shield, 
@@ -11,7 +13,9 @@ import {
   LayoutDashboard,
   CalendarDays,
   Receipt,
-  User
+  User,
+  Crown,
+  Gamepad2
 } from 'lucide-react';
 
 interface Props {
@@ -28,9 +32,12 @@ export const Navbar: React.FC<Props> = ({ onToggleSidebar, showSidebarToggle = t
     events,
     feeRecords,
     viewedEventIdsByUser,
-    viewedFeeRecordIdsByUser
+    viewedFeeRecordIdsByUser,
+    viewedAnnouncementUpdatedAtByUser
   } = useAppStore();
+  const announcement = useAnnouncementStore(state => state.announcement);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isGameOpen, setIsGameOpen] = useState(false);
 
   const isMemberRoute = location.pathname.startsWith('/member');
   const pendingMembersCount = profiles.filter((profile) => profile.status === 'pending').length;
@@ -49,13 +56,18 @@ export const Navbar: React.FC<Props> = ({ onToggleSidebar, showSidebarToggle = t
   const hasUnviewedFinances = feeRecords.some(
     (r) => r.user_id === currentUser.id && !userViewedFeeIds.includes(r.id)
   );
+  const hasUnviewedAnnouncement = isAnnouncementUnread(
+    announcement,
+    currentUser.id,
+    viewedAnnouncementUpdatedAtByUser
+  );
 
   const memberNavItems = [
     {
       to: '/member/dashboard',
       label: '個人儀表板',
       icon: LayoutDashboard,
-      hasDot: false
+      hasDot: hasUnviewedAnnouncement
     },
     {
       to: '/member/calendar',
@@ -149,6 +161,16 @@ export const Navbar: React.FC<Props> = ({ onToggleSidebar, showSidebarToggle = t
 
             {/* Right Controls */}
             <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsGameOpen(true)}
+                className="group relative flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 transition-all hover:border-emerald-300 hover:bg-emerald-100 active:scale-95"
+                title="玩羽球反應挑戰"
+                aria-label="開啟羽球反應挑戰"
+              >
+                <Gamepad2 className="h-5 w-5 transition-transform group-hover:-rotate-6 group-hover:scale-110" />
+                <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border-2 border-white bg-amber-400" />
+              </button>
               {/* User Dropdown */}
               <div className="relative">
                 <button
@@ -185,13 +207,15 @@ export const Navbar: React.FC<Props> = ({ onToggleSidebar, showSidebarToggle = t
                           <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200 whitespace-nowrap shrink-0">
                             {currentUser.level}
                           </span>
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-semibold border whitespace-nowrap shrink-0 ${
-                            currentUser.role === 'admin'
-                              ? 'bg-amber-50 text-amber-700 border-amber-200'
-                              : 'bg-slate-100 text-slate-600 border-slate-200'
-                          }`}>
-                            {currentUser.role === 'admin' ? '管理者' : '隊員'}
-                          </span>
+                          {currentUser.role === 'admin' ? (
+                            <span title="管理員" aria-label="管理員" className="inline-flex shrink-0 items-center">
+                              <Crown className="h-4 w-4 fill-amber-100 text-amber-500" />
+                            </span>
+                          ) : (
+                            <span className="shrink-0 whitespace-nowrap rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
+                              隊員
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -236,6 +260,7 @@ export const Navbar: React.FC<Props> = ({ onToggleSidebar, showSidebarToggle = t
           </div>
         </div>
       </header>
+      {isGameOpen && <ShuttleSmashGameModal onClose={() => setIsGameOpen(false)} />}
     </>
   );
 };

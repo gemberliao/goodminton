@@ -1,6 +1,7 @@
 import React, { lazy, Suspense, useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAppStore } from './store/useAppStore';
+import { useAnnouncementStore } from './store/useAnnouncementStore';
 import { getSupabaseConfig, supabase } from './lib/supabase';
 import { Layout } from './components/layout/Layout';
 import { AuthSessionProvider, useAuthSession } from './auth/AuthSessionProvider';
@@ -8,6 +9,7 @@ import { AuthSessionProvider, useAuthSession } from './auth/AuthSessionProvider'
 const Login = lazy(() => import('./pages/auth/Login').then((module) => ({ default: module.Login })));
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard').then((module) => ({ default: module.AdminDashboard })));
 const AdminEvents = lazy(() => import('./pages/admin/AdminEvents').then((module) => ({ default: module.AdminEvents })));
+const AdminAnnouncements = lazy(() => import('./pages/admin/AdminAnnouncements').then((module) => ({ default: module.AdminAnnouncements })));
 const AdminAttendance = lazy(() => import('./pages/admin/AdminAttendance').then((module) => ({ default: module.AdminAttendance })));
 const AdminMembers = lazy(() => import('./pages/admin/AdminMembers').then((module) => ({ default: module.AdminMembers })));
 const AdminFinances = lazy(() => import('./pages/admin/AdminFinances').then((module) => ({ default: module.AdminFinances })));
@@ -19,6 +21,7 @@ const MemberProfile = lazy(() => import('./pages/member/MemberProfile').then((mo
 const REALTIME_TABLES = new Set([
   'profiles',
   'events',
+  'announcements',
   'attendance',
   'match_surveys',
   'match_lineup_configs',
@@ -49,6 +52,9 @@ const LoginRoute: React.FC = () => {
   const currentUser = useAppStore((state) => state.currentUser);
   if (status === 'loading') return <PageLoading />;
   if (status === 'authenticated') {
+    const transitionStartedAt = Number(window.sessionStorage.getItem('goodminton-login-transition') || 0);
+    const isCompletingLogin = transitionStartedAt > 0 && Date.now() - transitionStartedAt < 5000;
+    if (isCompletingLogin) return <Login />;
     return <Navigate to={currentUser.role === 'admin' ? '/admin/dashboard' : '/member/dashboard'} replace />;
   }
   return <Login />;
@@ -62,9 +68,13 @@ const PageLoading: React.FC = () => (
 
 const RealtimeDataSync: React.FC = () => {
   const fetchFromSupabase = useAppStore((state) => state.fetchFromSupabase);
+  const userId = useAppStore(state => state.currentUser.id);
+  const fetchAnnouncements = useAnnouncementStore(state => state.fetchAnnouncements);
+  const resetAnnouncements = useAnnouncementStore(state => state.reset);
   const { status } = useAuthSession();
 
   useEffect(() => {
+    resetAnnouncements();
     if (!getSupabaseConfig().isConfigured || status !== 'authenticated') return;
 
     let disposed = false;
@@ -80,7 +90,7 @@ const RealtimeDataSync: React.FC = () => {
       }
 
       refreshInFlight = true;
-      const result = await fetchFromSupabase();
+      const [result] = await Promise.all([fetchFromSupabase(), fetchAnnouncements()]);
       refreshInFlight = false;
 
       if (!result.success) {
@@ -102,7 +112,7 @@ const RealtimeDataSync: React.FC = () => {
     // Load the authoritative database state before rendering stale local data.
     void refresh();
 
-    // One schema-level channel covers all nine application tables. The local
+    // One schema-level channel covers application tables. The local
     // allow-list avoids unnecessary refreshes if more public tables are added.
     const channel = supabase
       .channel('goodminton-global-database-sync')
@@ -133,8 +143,9 @@ const RealtimeDataSync: React.FC = () => {
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleVisibility);
       void supabase.removeChannel(channel);
+      resetAnnouncements();
     };
-  }, [fetchFromSupabase, status]);
+  }, [fetchFromSupabase, fetchAnnouncements, resetAnnouncements, userId, status]);
 
   return null;
 };
@@ -160,6 +171,7 @@ export default function App() {
           />
 
           {/* Admin Routes */}
+          <Route path="/admin/announcements" element={<AdminRouteGuard><AdminAnnouncements /></AdminRouteGuard>} />
           <Route
             path="/admin/dashboard"
             element={

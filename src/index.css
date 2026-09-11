@@ -153,12 +153,33 @@ body {
   transform: translateY(-1px);
 }
 
-/* Keep two-character event type labels readable inside narrow mobile day cells. */
+/* Let event names wrap and grow the calendar row on both calendar pages. */
+.event-calendar .fc .fc-daygrid-event,
+.event-calendar .fc .fc-event-title {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.event-calendar .fc .fc-event-main-frame,
+.event-calendar .fc .fc-event-title-container {
+  min-width: 0;
+}
+
+.event-calendar .fc .fc-event-title {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  line-height: 1.45;
+  text-align: center;
+}
+
 @media (max-width: 639px) {
-  .member-calendar .fc .fc-event {
-    margin-left: 3px !important;
-    margin-right: 3px !important;
-    padding: 3px 1px !important;
+  .event-calendar .fc .fc-event {
+    margin-left: 2px !important;
+    margin-right: 2px !important;
+    padding: 4px 2px !important;
+    font-size: 0.75rem !important;
   }
 }
 
@@ -182,4 +203,400 @@ body {
   outline: none;
   border-color: #059669;
   box-shadow: 0 0 0 1px #059669;
+}
+
+/* Badminton-themed login entrance and successful-login transition. */
+.login-page {
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(16, 185, 129, 0.13), transparent 28rem),
+    radial-gradient(circle at 82% 82%, rgba(15, 23, 42, 0.08), transparent 30rem),
+    #f8fafc;
+}
+
+.login-court-lines {
+  position: absolute;
+  inset: 4%;
+  z-index: 0;
+  overflow: hidden;
+  border: 1px solid rgba(16, 185, 129, 0.14);
+  border-radius: 2.5rem;
+  opacity: 0;
+  transform: perspective(900px) rotateX(58deg) scale(1.08);
+  animation: login-court-reveal 900ms ease-out 150ms forwards;
+}
+
+.login-court-lines::before,
+.login-court-lines::after,
+.login-court-center-line,
+.login-court-service-line {
+  content: '';
+  position: absolute;
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.login-court-lines::before {
+  inset: 0 auto 0 50%;
+  width: 1px;
+}
+
+.login-court-lines::after {
+  inset: 50% 0 auto;
+  height: 1px;
+}
+
+.login-court-center-line {
+  top: 0;
+  bottom: 0;
+  left: 22%;
+  width: 1px;
+  box-shadow: calc(56vw) 0 0 rgba(16, 185, 129, 0.12);
+}
+
+.login-court-service-line {
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+
+.login-court-service-line-left {
+  top: 27%;
+}
+
+.login-court-service-line-right {
+  bottom: 27%;
+}
+
+.login-card-enter {
+  opacity: 0;
+  transform: translateY(18px) scale(0.985);
+  animation: login-card-enter 650ms cubic-bezier(0.22, 1, 0.36, 1) 120ms forwards;
+}
+
+.login-success-overlay {
+  animation: login-overlay-enter 180ms ease-out both;
+}
+
+.login-shuttle-flight {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 9;
+  margin: -2.5rem 0 0 -2.5rem;
+  opacity: 0;
+  animation:
+    login-shuttle-smash 1.45s cubic-bezier(0.16, 0.76, 0.22, 1) 60ms both,
+    login-shuttle-fade 1.45s linear 60ms both;
+}
+
+.login-shuttle-arc {
+  animation: login-shuttle-arc 1.45s linear 60ms both;
+}
+
+.login-shuttle-orientation {
+  transform-origin: 50% 58%;
+  animation: login-shuttle-orient 1.45s linear 60ms both;
+}
+
+.login-impact-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5rem;
+  height: 5rem;
+  margin: -2.5rem 0 0 -2.5rem;
+  border: 3px solid rgba(52, 211, 153, 0.9);
+  border-radius: 9999px;
+  opacity: 0;
+  box-shadow: 0 0 35px rgba(52, 211, 153, 0.55);
+  animation: login-impact-burst 400ms ease-out 1380ms both;
+}
+
+.login-speed-line {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 58vw;
+  height: 2px;
+  border-radius: 999px;
+  opacity: 0;
+  transform-origin: left center;
+  background: linear-gradient(90deg, rgba(52, 211, 153, 0.75), transparent);
+  animation: login-speed-streak 720ms ease-out both;
+}
+
+.login-speed-line-one {
+  margin: -10vh 0 0 4vw;
+  transform: rotate(-24deg);
+  animation-delay: 160ms;
+}
+
+.login-speed-line-two {
+  margin: -2vh 0 0 3vw;
+  transform: rotate(-19deg);
+  animation-delay: 240ms;
+}
+
+.login-speed-line-three {
+  margin: 6vh 0 0 4vw;
+  transform: rotate(-14deg);
+  animation-delay: 320ms;
+}
+
+.login-success-copy {
+  opacity: 0;
+  transform: translateY(16px) scale(0.96);
+  animation: login-success-copy 420ms cubic-bezier(0.22, 1, 0.36, 1) 1160ms forwards;
+}
+
+@keyframes login-court-reveal {
+  to {
+    opacity: 1;
+    transform: perspective(900px) rotateX(58deg) scale(1);
+  }
+}
+
+@keyframes login-card-enter {
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes login-overlay-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes login-shuttle-smash {
+  0% {
+    transform: translateX(72vw) scale(0.5);
+  }
+  90% {
+    transform: translateX(0.5vw) scale(1.1);
+  }
+  96% {
+    transform: translateX(0) scale(0.8);
+  }
+  100% {
+    transform: translateX(-1.5vw) scale(0.16);
+  }
+}
+
+@keyframes login-shuttle-fade {
+  0% { opacity: 0; }
+  8%, 96% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes login-shuttle-arc {
+  0% {
+    transform: translateY(-18vh);
+    animation-timing-function: cubic-bezier(0.18, 0.68, 0.28, 1);
+  }
+  43% {
+    transform: translateY(-43vh);
+    animation-timing-function: cubic-bezier(0.55, 0, 0.88, 0.48);
+  }
+  90% {
+    transform: translateY(-4vh);
+  }
+  96% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(2.5vh);
+  }
+}
+
+@keyframes login-shuttle-orient {
+  0% {
+    transform: rotate(86deg);
+  }
+  43% {
+    transform: rotate(44deg);
+  }
+  74% {
+    transform: rotate(12deg);
+  }
+  90% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(-12deg);
+  }
+}
+
+@keyframes login-impact-burst {
+  0% {
+    opacity: 1;
+    transform: scale(0.15);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(5.5);
+  }
+}
+
+@keyframes login-speed-streak {
+  0% {
+    opacity: 0;
+    scale: 0 1;
+  }
+  35% { opacity: 0.75; }
+  100% {
+    opacity: 0;
+    scale: 1 1;
+  }
+}
+
+@keyframes login-success-copy {
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-court-lines,
+  .login-card-enter {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Frontend-only doubles draw experience. */
+.quick-draw-modal {
+  transform-origin: 50% 55%;
+  animation: quick-draw-modal-enter 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.quick-draw-shuffling {
+  animation: quick-draw-shuffle 150ms ease-in-out infinite alternate;
+}
+
+.quick-draw-reveal {
+  animation: quick-draw-player-reveal 520ms cubic-bezier(0.18, 0.89, 0.32, 1.28) both;
+}
+
+@keyframes quick-draw-modal-enter {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes quick-draw-shuffle {
+  from {
+    opacity: 0.45;
+    transform: translate(-50%, -50%) scale(0.9) rotate(-2deg);
+    filter: blur(0.8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.06) rotate(2deg);
+    filter: blur(0);
+  }
+}
+
+@keyframes quick-draw-player-reveal {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.45);
+    filter: blur(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+    filter: blur(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quick-draw-modal,
+  .quick-draw-shuffling,
+  .quick-draw-reveal {
+    animation: none;
+    filter: none;
+  }
+}
+
+/* Shared memory-only shuttle reaction game. */
+.shuttle-game-modal {
+  animation: shuttle-game-modal-enter 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.shuttle-game-target {
+  animation: shuttle-game-target-enter 180ms cubic-bezier(0.18, 0.89, 0.32, 1.4) both;
+}
+
+.shuttle-game-target:active {
+  scale: 0.82;
+}
+
+.shuttle-game-glow {
+  animation: shuttle-game-glow 650ms ease-in-out infinite alternate;
+}
+
+.shuttle-game-points {
+  animation: shuttle-game-points 620ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes shuttle-game-modal-enter {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes shuttle-game-target-enter {
+  from {
+    opacity: 0;
+    scale: 0.3;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+@keyframes shuttle-game-glow {
+  from {
+    opacity: 0.25;
+    transform: scale(0.75);
+  }
+  to {
+    opacity: 0.85;
+    transform: scale(1.25);
+  }
+}
+
+@keyframes shuttle-game-points {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -25%) scale(0.55);
+  }
+  20% { opacity: 1; }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -140%) scale(1.15);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shuttle-game-modal,
+  .shuttle-game-target,
+  .shuttle-game-glow,
+  .shuttle-game-points {
+    animation: none;
+  }
 }

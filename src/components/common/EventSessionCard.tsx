@@ -88,19 +88,17 @@ export const EventSessionCard: React.FC<EventSessionCardProps> = ({
           </span>
           <div className="flex items-center space-x-2 shrink-0">
             {isMatchEvent && (
-              <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200 whitespace-nowrap shrink-0">
+              <span className="px-3 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-800 whitespace-nowrap shrink-0">
                 5 點團體賽
               </span>
             )}
-            <span
-              className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap shrink-0 ${
-                isPast
-                  ? 'bg-slate-100 text-slate-500 border border-slate-200'
-                  : isFull
-                  ? 'bg-slate-200 text-slate-700 border border-slate-300'
-                  : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-              }`}
-            >
+            <span className={`px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 ${
+              isPast
+                ? 'bg-slate-100 text-slate-500'
+                : isFull
+                ? 'bg-rose-50 text-rose-700/80'
+                : 'bg-emerald-50 text-emerald-700/80'
+            }`}>
               {isPast ? '已結束' : isFull ? '已額滿' : '報名中'}
             </span>
           </div>
@@ -143,8 +141,8 @@ export const EventSessionCard: React.FC<EventSessionCardProps> = ({
                 </span>
               </div>
               {isLineupPublished && (
-                <span className="text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-0.5 rounded-full flex items-center space-x-1.5 whitespace-nowrap shrink-0">
-                  <CheckCircle className="w-3.5 h-3.5 shrink-0" />
+                <span className="text-xs font-semibold bg-emerald-50 text-emerald-700/80 px-2.5 py-1 rounded-lg flex items-center space-x-1.5 whitespace-nowrap shrink-0">
+                  <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                   <span>5 點名單已發布</span>
                 </span>
               )}
@@ -156,7 +154,7 @@ export const EventSessionCard: React.FC<EventSessionCardProps> = ({
                 {userStatus === 'absent' ? (
                   // User is absent (請假)
                   <div className="space-y-2.5">
-                    <div className="flex items-center space-x-2 text-rose-700 bg-rose-50 border border-rose-200/80 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium">
+                    <div className="flex items-center space-x-2 text-rose-700 bg-rose-50 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium">
                       <XCircle className="w-4 h-4 shrink-0 text-rose-600" />
                       <span>您目前狀態為<strong>【請假】</strong>，無法填寫出賽意願。</span>
                     </div>
@@ -190,7 +188,7 @@ export const EventSessionCard: React.FC<EventSessionCardProps> = ({
                 ) : userStatus === 'pending' ? (
                   // User has not RSVP'd yet
                   <div className="space-y-2.5">
-                    <div className="flex items-center space-x-2 text-amber-800 bg-amber-50 border border-amber-200/80 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium">
+                    <div className="flex items-center space-x-2 text-amber-800 bg-amber-50 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium">
                       <Sparkles className="w-4 h-4 shrink-0 text-amber-600" />
                       <span>尚未報名出席活動 (僅限出席者填寫出賽意願)</span>
                     </div>
@@ -282,7 +280,7 @@ export const EventSessionCard: React.FC<EventSessionCardProps> = ({
                             </button>
                           )}
                           {isPast && !mySurvey && !isLineupPublished && (
-                            <span className="px-3.5 py-2 text-xs sm:text-sm font-semibold text-slate-500 bg-slate-100 rounded-xl border border-slate-200">活動已結束</span>
+                            <span className="px-3.5 py-2 text-xs sm:text-sm font-semibold text-slate-500 bg-slate-100 rounded-xl ">活動已結束</span>
                           )}
                         </>
                       )}

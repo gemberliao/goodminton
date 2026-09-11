@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAppStore } from '../../store/useAppStore';
+import { isAnnouncementUnread, useAnnouncementStore } from '../../store/useAnnouncementStore';
 import { 
   LayoutDashboard, 
   Calendar, 
@@ -10,7 +11,8 @@ import {
   User, 
   ShieldAlert,
   CalendarDays,
-  Receipt
+  Receipt,
+  Megaphone
 } from 'lucide-react';
 
 interface Props {
@@ -25,8 +27,10 @@ export const Sidebar: React.FC<Props> = ({ isOpen, onCloseMobile }) => {
     feeRecords, 
     events, 
     viewedEventIdsByUser, 
-    viewedFeeRecordIdsByUser 
+    viewedFeeRecordIdsByUser,
+    viewedAnnouncementUpdatedAtByUser
   } = useAppStore();
+  const announcement = useAnnouncementStore(state => state.announcement);
   const isAdmin = currentUser.role === 'admin';
 
   const pendingMembersCount = profiles.filter((p) => p.status === 'pending').length;
@@ -40,6 +44,11 @@ export const Sidebar: React.FC<Props> = ({ isOpen, onCloseMobile }) => {
   const userViewedFeeIds = viewedFeeRecordIdsByUser?.[currentUser.id] || [];
   const hasUnviewedFinances = feeRecords.some(
     (r) => r.user_id === currentUser.id && !userViewedFeeIds.includes(r.id)
+  );
+  const hasUnviewedAnnouncement = isAnnouncementUnread(
+    announcement,
+    currentUser.id,
+    viewedAnnouncementUpdatedAtByUser
   );
 
   return (
@@ -101,6 +110,19 @@ export const Sidebar: React.FC<Props> = ({ isOpen, onCloseMobile }) => {
             >
               <Calendar className="w-5 h-5 opacity-90" />
               <span>球隊行事曆</span>
+            </NavLink>
+
+            <NavLink to="/admin/announcements" onClick={onCloseMobile}
+              className={({ isActive }) => `flex items-center justify-between px-4 py-3 rounded-xl text-sm sm:text-base font-medium transition-colors ${isActive ? 'bg-emerald-600 text-white shadow-sm font-bold' : 'text-slate-300 hover:bg-slate-800'}`}>
+              <div className="flex items-center space-x-3">
+                <Megaphone className="w-5 h-5 opacity-90" /><span>球隊公告</span>
+              </div>
+              {hasUnviewedAnnouncement && (
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
+                </span>
+              )}
             </NavLink>
 
             <NavLink
@@ -183,10 +205,18 @@ export const Sidebar: React.FC<Props> = ({ isOpen, onCloseMobile }) => {
                   : 'text-slate-300 hover:bg-slate-800'
               }`
             }
-          >
-            <LayoutDashboard className="w-5 h-5 opacity-90" />
-            <span>個人儀表板</span>
-          </NavLink>
+            >
+              <div className="flex items-center space-x-3">
+                <LayoutDashboard className="w-5 h-5 opacity-90" />
+                <span>個人儀表板</span>
+              </div>
+              {hasUnviewedAnnouncement && (
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
+                </span>
+              )}
+            </NavLink>
 
           <NavLink
             to="/member/calendar"
@@ -247,27 +277,6 @@ export const Sidebar: React.FC<Props> = ({ isOpen, onCloseMobile }) => {
           >
             <User className="w-5 h-5 opacity-90" />
             <span>個人資料與戰力層級</span>
-          </NavLink>
-        </div>
-
-        {/* Login Access Link */}
-        <div className="pt-4 border-t border-slate-800 space-y-1">
-          <div className="px-3 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-            系統進入點
-          </div>
-          <NavLink
-            to="/login"
-            onClick={onCloseMobile}
-            className={({ isActive }) =>
-              `flex items-center space-x-3 px-3.5 py-3 rounded-xl text-sm font-semibold transition-all ${
-                isActive
-                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-bold'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
-              }`
-            }
-          >
-            <User className="w-4 h-4 text-emerald-400" />
-            <span>登入與身分選擇</span>
           </NavLink>
         </div>
 

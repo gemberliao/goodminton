@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAppStore } from '../../store/useAppStore';
+import { isAnnouncementUnread, useAnnouncementStore } from '../../store/useAnnouncementStore';
 import { 
   LayoutDashboard, 
   CalendarDays, 
@@ -20,8 +21,10 @@ export const BottomNav: React.FC = () => {
     feeRecords, 
     events, 
     viewedEventIdsByUser, 
-    viewedFeeRecordIdsByUser 
+    viewedFeeRecordIdsByUser,
+    viewedAnnouncementUpdatedAtByUser
   } = useAppStore();
+  const announcement = useAnnouncementStore(state => state.announcement);
   const isAdminRoute = location.pathname.startsWith('/admin');
 
   const pendingMembersCount = profiles.filter((p) => p.status === 'pending').length;
@@ -36,13 +39,18 @@ export const BottomNav: React.FC = () => {
   const unviewedFinancesCount = feeRecords.filter(
     (r) => r.user_id === currentUser.id && !userViewedFeeIds.includes(r.id)
   ).length;
+  const hasUnviewedAnnouncement = isAnnouncementUnread(
+    announcement,
+    currentUser.id,
+    viewedAnnouncementUpdatedAtByUser
+  );
 
   const memberNavItems = [
     {
       to: '/member/dashboard',
       label: '儀表板',
       icon: LayoutDashboard,
-      badgeCount: 0
+      badgeCount: hasUnviewedAnnouncement ? 1 : 0
     },
     {
       to: '/member/calendar',
@@ -69,7 +77,7 @@ export const BottomNav: React.FC = () => {
       to: '/admin/dashboard',
       label: '總覽',
       icon: LayoutDashboard,
-      badgeCount: 0
+      badgeCount: hasUnviewedAnnouncement ? 1 : 0
     },
     {
       to: '/admin/events',
@@ -140,4 +148,3 @@ export const BottomNav: React.FC = () => {
     </nav>
   );
 };
-

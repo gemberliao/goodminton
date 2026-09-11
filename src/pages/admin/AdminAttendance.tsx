@@ -21,7 +21,8 @@ import {
   LayoutGrid,
   ListFilter,
   Sparkles,
-  MessageSquare
+  MessageSquare,
+  Crown
 } from 'lucide-react';
 
 export const AdminAttendance: React.FC = () => {
@@ -46,6 +47,22 @@ export const AdminAttendance: React.FC = () => {
   // Read eventId from query param or location state
   const queryEventId = searchParams.get('eventId') || (location.state as { eventId?: string })?.eventId;
 
+  const activeEvents = useMemo(
+    () => sortedEvents.filter((event) => !isEventPast(event)),
+    [sortedEvents]
+  );
+  const endedEvents = useMemo(
+    () => sortedEvents.filter((event) => isEventPast(event)),
+    [sortedEvents]
+  );
+
+  const [eventScope, setEventScope] = useState<'active' | 'ended'>(() => {
+    const linkedEvent = sortedEvents.find((event) => event.id === queryEventId);
+    if (linkedEvent) return isEventPast(linkedEvent) ? 'ended' : 'active';
+    return activeEvents.length > 0 ? 'active' : 'ended';
+  });
+  const scopedEvents = eventScope === 'active' ? activeEvents : endedEvents;
+
   // Selected event state
   const [selectedEventId, setSelectedEventId] = useState<string>(() => {
     if (queryEventId && sortedEvents.some(e => e.id === queryEventId)) {
@@ -59,16 +76,25 @@ export const AdminAttendance: React.FC = () => {
 
   // Keep state synced if URL queryParam changes or external navigation happens
   useEffect(() => {
-    if (queryEventId && sortedEvents.some(e => e.id === queryEventId)) {
-      setSelectedEventId(queryEventId);
+    const linkedEvent = sortedEvents.find((event) => event.id === queryEventId);
+    if (linkedEvent) {
+      setEventScope(isEventPast(linkedEvent) ? 'ended' : 'active');
+      setSelectedEventId(linkedEvent.id);
       setViewMode('single');
     }
   }, [queryEventId, sortedEvents]);
 
+  // Keep the selected event inside the currently visible category.
+  useEffect(() => {
+    if (!scopedEvents.some((event) => event.id === selectedEventId)) {
+      setSelectedEventId(scopedEvents[0]?.id || '');
+    }
+  }, [scopedEvents, selectedEventId]);
+
   // Keep selectedEvent valid if events change
   const currentEvent = useMemo(() => {
-    return sortedEvents.find(e => e.id === selectedEventId) || sortedEvents[0] || null;
-  }, [sortedEvents, selectedEventId]);
+    return scopedEvents.find(e => e.id === selectedEventId) || scopedEvents[0] || null;
+  }, [scopedEvents, selectedEventId]);
 
   // View mode: 'single' (clean event focused) or 'matrix' (full table overview)
   const [viewMode, setViewMode] = useState<'single' | 'matrix'>('single');
@@ -122,25 +148,35 @@ export const AdminAttendance: React.FC = () => {
   // Index of current event for prev/next buttons
   const currentEventIndex = useMemo(() => {
     if (!currentEvent) return -1;
-    return sortedEvents.findIndex(e => e.id === currentEvent.id);
-  }, [sortedEvents, currentEvent]);
+    return scopedEvents.findIndex(e => e.id === currentEvent.id);
+  }, [scopedEvents, currentEvent]);
 
   const handleSelectEvent = (id: string) => {
     setSelectedEventId(id);
     setSearchParams({ eventId: id });
   };
 
+  const handleEventScopeChange = (scope: 'active' | 'ended') => {
+    setEventScope(scope);
+    const nextEvents = scope === 'active' ? activeEvents : endedEvents;
+    const firstId = nextEvents[0]?.id || '';
+    setSelectedEventId(firstId);
+    setStatusFilter('all');
+    setSearchTerm('');
+    setSearchParams(firstId ? { eventId: firstId } : {});
+  };
+
   const handlePrevEvent = () => {
     if (currentEventIndex > 0) {
-      const nextId = sortedEvents[currentEventIndex - 1].id;
+      const nextId = scopedEvents[currentEventIndex - 1].id;
       setSelectedEventId(nextId);
       setSearchParams({ eventId: nextId });
     }
   };
 
   const handleNextEvent = () => {
-    if (currentEventIndex < sortedEvents.length - 1) {
-      const nextId = sortedEvents[currentEventIndex + 1].id;
+    if (currentEventIndex < scopedEvents.length - 1) {
+      const nextId = scopedEvents[currentEventIndex + 1].id;
       setSelectedEventId(nextId);
       setSearchParams({ eventId: nextId });
     }
@@ -159,7 +195,7 @@ export const AdminAttendance: React.FC = () => {
     switch (status) {
       case 'attending':
         return (
-          <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 inline-flex items-center justify-center space-x-1 whitespace-nowrap">
+          <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-50 text-slate-800 inline-flex items-center justify-center space-x-1 whitespace-nowrap">
             <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
             <span>出席</span>
           </span>
@@ -169,7 +205,7 @@ export const AdminAttendance: React.FC = () => {
           <div className="flex flex-col items-center">
             <span 
               title={remarks ? `請假理由：${remarks}` : '請假'}
-              className="px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200 inline-flex items-center justify-center space-x-1 whitespace-nowrap"
+              className="px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-50 text-slate-800 inline-flex items-center justify-center space-x-1 whitespace-nowrap"
             >
               <XCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
               <span>請假</span>
@@ -183,7 +219,7 @@ export const AdminAttendance: React.FC = () => {
         );
       default:
         return (
-          <span className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-500 border border-slate-200 inline-flex items-center justify-center space-x-1 whitespace-nowrap">
+          <span className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-500 inline-flex items-center justify-center space-x-1 whitespace-nowrap">
             <HelpCircle className="w-3.5 h-3.5 text-slate-400 shrink-0" />
             <span>未填寫</span>
           </span>
@@ -204,9 +240,6 @@ export const AdminAttendance: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center space-x-2.5">
-            <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap shrink-0 inline-block">
-              管理員專區
-            </span>
             <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">活動出缺席點名與管理</h1>
           </div>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
@@ -262,6 +295,43 @@ export const AdminAttendance: React.FC = () => {
           
           {/* Activity Selector Bar */}
           <div className="bg-white border border-slate-200/80 rounded-3xl p-4 sm:p-5 shadow-2xs space-y-4">
+            <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-200 bg-slate-100 p-1.5">
+              <button
+                type="button"
+                onClick={() => handleEventScopeChange('active')}
+                className={`rounded-xl px-3 py-2.5 text-xs sm:text-sm font-bold transition-all ${
+                  eventScope === 'active'
+                    ? 'bg-emerald-600 text-white shadow-2xs'
+                    : 'text-slate-600 hover:bg-white hover:text-slate-900'
+                }`}
+              >
+                進行中的活動 ({activeEvents.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => handleEventScopeChange('ended')}
+                className={`rounded-xl px-3 py-2.5 text-xs sm:text-sm font-bold transition-all ${
+                  eventScope === 'ended'
+                    ? 'bg-slate-700 text-white shadow-2xs'
+                    : 'text-slate-600 hover:bg-white hover:text-slate-900'
+                }`}
+              >
+                已結束 ({endedEvents.length})
+              </button>
+            </div>
+
+            {scopedEvents.length === 0 ? (
+              <div className="py-6 text-center">
+                <CalendarIcon className="mx-auto h-8 w-8 text-slate-300" />
+                <p className="mt-2 text-sm font-bold text-slate-700">
+                  {eventScope === 'active' ? '目前沒有進行中的活動' : '目前沒有已結束的活動'}
+                </p>
+                <p className="mt-1 text-xs text-slate-400">
+                  {eventScope === 'active' ? '新建立或尚未結束的活動會顯示在這裡。' : '活動結束後會自動移到這裡。'}
+                </p>
+              </div>
+            ) : (
+              <>
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               
               {/* Event Selector Dropdown */}
@@ -272,14 +342,11 @@ export const AdminAttendance: React.FC = () => {
                     onChange={(e) => handleSelectEvent(e.target.value)}
                     className="w-full pl-3.5 pr-8 py-2.5 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-2xl text-xs sm:text-sm font-bold text-slate-900 focus:outline-none focus:border-emerald-500 focus:bg-white transition-all cursor-pointer truncate"
                   >
-                    {sortedEvents.map((evt) => {
-                      const isPast = isEventPast(evt);
-                      return (
-                        <option key={evt.id} value={evt.id}>
-                          {evt.event_date} 【{evt.event_type}】{evt.title} {isPast ? '（已結束）' : '（進行中/待辦）'}
-                        </option>
-                      );
-                    })}
+                    {scopedEvents.map((evt) => (
+                      <option key={evt.id} value={evt.id}>
+                        {evt.event_date} 【{evt.event_type}】{evt.title}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -287,8 +354,9 @@ export const AdminAttendance: React.FC = () => {
               {/* Event Metadata Tag Summary */}
               {currentEvent && (
                 <div className="flex items-center gap-2 flex-wrap text-xs text-slate-600 font-medium">
-                  <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-bold border border-emerald-200">
-                    {currentEvent.event_type}
+                  <span className="inline-flex items-center gap-1.5 py-1 text-slate-800 font-bold">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
+                    <span>{currentEvent.event_type}</span>
                   </span>
                   <div className="flex items-center gap-1 text-slate-700 font-semibold">
                     <Clock className="w-3.5 h-3.5 text-slate-400" />
@@ -311,10 +379,11 @@ export const AdminAttendance: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setStatusFilter('all')}
-                  className={`p-3.5 rounded-2xl text-center transition-colors cursor-pointer border-2 ${
+                  aria-pressed={statusFilter === 'all'}
+                  className={`p-3.5 rounded-2xl text-center transition-colors cursor-pointer ${
                     statusFilter === 'all'
-                      ? 'bg-slate-100/90 border-slate-900 text-slate-900'
-                      : 'bg-white hover:bg-slate-50 border-slate-200/80 text-slate-600'
+                      ? 'bg-slate-100 text-slate-900'
+                      : 'bg-slate-50/70 hover:bg-slate-100 text-slate-600'
                   }`}
                 >
                   <div className="text-[11px] font-bold text-slate-500">
@@ -329,19 +398,20 @@ export const AdminAttendance: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setStatusFilter('attending')}
-                  className={`p-3.5 rounded-2xl text-center transition-colors cursor-pointer border-2 ${
+                  aria-pressed={statusFilter === 'attending'}
+                  className={`p-3.5 rounded-2xl text-center transition-colors cursor-pointer ${
                     statusFilter === 'attending'
-                      ? 'bg-emerald-50 border-emerald-600 text-emerald-900'
-                      : 'bg-white hover:bg-emerald-50/30 border-slate-200/80 text-slate-600'
+                      ? 'bg-emerald-100/80 text-slate-900'
+                      : 'bg-emerald-50/60 hover:bg-emerald-100/70 text-slate-600'
                   }`}
                 >
-                  <div className="text-[11px] font-bold text-emerald-700 flex items-center justify-center gap-1">
+                  <div className="text-[11px] font-bold text-emerald-700/80 flex items-center justify-center gap-1">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                     <span>已報名出席</span>
                   </div>
-                  <div className="text-xl font-black text-emerald-700 tracking-tight mt-0.5">
+                  <div className="text-xl font-black text-emerald-700/80 tracking-tight mt-0.5">
                     {currentEventStats.attending} 
-                    <span className="text-xs font-normal text-emerald-600/80">
+                    <span className="text-xs font-normal text-emerald-700/70">
                       {currentEvent.max_participants ? ` / ${currentEvent.max_participants}` : ''} 人
                     </span>
                   </div>
@@ -351,18 +421,19 @@ export const AdminAttendance: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setStatusFilter('absent')}
-                  className={`p-3.5 rounded-2xl text-center transition-colors cursor-pointer border-2 ${
+                  aria-pressed={statusFilter === 'absent'}
+                  className={`p-3.5 rounded-2xl text-center transition-colors cursor-pointer ${
                     statusFilter === 'absent'
-                      ? 'bg-rose-50 border-rose-600 text-rose-900'
-                      : 'bg-white hover:bg-rose-50/30 border-slate-200/80 text-slate-600'
+                      ? 'bg-rose-100/80 text-slate-900'
+                      : 'bg-rose-50/60 hover:bg-rose-100/70 text-slate-600'
                   }`}
                 >
-                  <div className="text-[11px] font-bold text-rose-700 flex items-center justify-center gap-1">
+                  <div className="text-[11px] font-bold text-rose-700/80 flex items-center justify-center gap-1">
                     <XCircle className="w-3.5 h-3.5 text-rose-600" />
                     <span>已請假</span>
                   </div>
-                  <div className="text-xl font-black text-rose-700 tracking-tight mt-0.5">
-                    {currentEventStats.absent} <span className="text-xs font-normal text-rose-600/80">人</span>
+                  <div className="text-xl font-black text-rose-700/80 tracking-tight mt-0.5">
+                    {currentEventStats.absent} <span className="text-xs font-normal text-rose-700/70">人</span>
                   </div>
                 </button>
 
@@ -370,10 +441,11 @@ export const AdminAttendance: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setStatusFilter('pending')}
-                  className={`p-3.5 rounded-2xl text-center transition-colors cursor-pointer border-2 ${
+                  aria-pressed={statusFilter === 'pending'}
+                  className={`p-3.5 rounded-2xl text-center transition-colors cursor-pointer ${
                     statusFilter === 'pending'
-                      ? 'bg-slate-100 border-slate-700 text-slate-900'
-                      : 'bg-white hover:bg-slate-50 border-slate-200/80 text-slate-600'
+                      ? 'bg-slate-200/80 text-slate-900'
+                      : 'bg-slate-50/70 hover:bg-slate-100 text-slate-600'
                   }`}
                 >
                   <div className="text-[11px] font-bold text-slate-600 flex items-center justify-center gap-1">
@@ -386,9 +458,12 @@ export const AdminAttendance: React.FC = () => {
                 </button>
               </div>
             )}
+              </>
+            )}
           </div>
 
           {/* Search & Batch Controls */}
+          {currentEvent && (
           <div className="bg-white border border-slate-200/80 rounded-3xl p-4 sm:p-5 shadow-2xs space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               
@@ -396,7 +471,7 @@ export const AdminAttendance: React.FC = () => {
               <div className="text-xs sm:text-sm font-bold text-slate-700 flex items-center gap-1.5">
                 <span>名單清單</span>
                 <span className="text-slate-300">·</span>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200/70">
+                <span className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 ">
                   {statusFilter === 'all' && `全部隊員 (${filteredMembers.length})`}
                   {statusFilter === 'attending' && `已出席 (${filteredMembers.length})`}
                   {statusFilter === 'absent' && `已請假 (${filteredMembers.length})`}
@@ -449,12 +524,12 @@ export const AdminAttendance: React.FC = () => {
                         <div>
                           <div className="flex items-center space-x-2">
                             <span className="font-bold text-slate-900 text-sm">{member.name}</span>
-                            <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600 border border-slate-200/80">
+                            <span className="px-2 py-0.5 rounded-lg text-[11px] font-bold bg-slate-100 text-slate-600 ">
                               {member.level}
                             </span>
                             {member.role === 'admin' && (
-                              <span className="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                                管理員
+                              <span title="管理員" aria-label="管理員">
+                                <Crown className="h-4 w-4 fill-amber-100 text-amber-500" />
                               </span>
                             )}
                           </div>
@@ -525,6 +600,7 @@ export const AdminAttendance: React.FC = () => {
               )}
             </div>
           </div>
+          )}
         </div>
       ) : (
         /* MATRIX TABLE VIEW (全期出勤矩陣總覽) */
@@ -596,7 +672,7 @@ export const AdminAttendance: React.FC = () => {
 
                       {/* Level */}
                       <td className="p-3 border-r border-slate-100 text-center">
-                        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200/80 whitespace-nowrap shadow-2xs">
+                        <span className="px-2 py-0.5 rounded-lg text-[11px] font-bold bg-slate-100 text-slate-700 whitespace-nowrap shadow-2xs">
                           {member.level}
                         </span>
                       </td>

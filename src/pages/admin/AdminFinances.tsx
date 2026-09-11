@@ -233,7 +233,9 @@ export const AdminFinances: React.FC = () => {
     const result = await addFeeCollection(
       splitTitle,
       splitType,
-      Number(totalAmount),
+      splitType === 'split'
+        ? Number(totalAmount)
+        : Number(calculatedSplitPerPerson) * memberCount,
       Number(calculatedSplitPerPerson),
       selectedUserIds,
       dueDate
@@ -280,9 +282,6 @@ export const AdminFinances: React.FC = () => {
       {/* Header */}
       <div>
         <div className="flex items-center space-x-2.5">
-          <span className="px-3 py-1 rounded-full text-xs sm:text-sm font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap shrink-0 inline-block">
-            管理員專區
-          </span>
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">帳務控制台 & 智慧分攤引擎</h1>
         </div>
         <p className="text-sm text-slate-500 mt-1.5">
@@ -308,7 +307,7 @@ export const AdminFinances: React.FC = () => {
             <div>
               <div className="text-sm font-bold text-amber-900 flex items-center space-x-2">
                 <span>待管理員對帳審核通知</span>
-                <span className="px-2.5 py-0.5 rounded-full text-xs bg-amber-200 text-amber-900 font-bold">
+                <span className="px-2.5 py-0.5 rounded-lg text-xs bg-amber-200 text-slate-800 font-bold">
                   {pendingRecords.length} 筆待確認
                 </span>
               </div>
@@ -726,16 +725,22 @@ export const AdminFinances: React.FC = () => {
 
                       {/* Actions & Metadata */}
                       <div className="flex items-center space-x-2 self-start md:self-auto flex-wrap gap-y-2">
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                          currentCollectionIsOpen
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
-                            : 'bg-slate-100 text-slate-500'
+                        <span className={`inline-flex items-center gap-1.5 py-1 text-xs font-bold ${
+                          currentCollectionIsOpen ? 'text-slate-800' : 'text-slate-500'
                         }`}>
-                          {currentCollectionIsOpen
-                            ? '進行催繳中'
-                            : currentCollection.status === 'closed'
-                            ? '已手動結案'
-                            : '已逾截止日'}
+                          <span
+                            className={`h-1.5 w-1.5 rounded-full ${
+                              currentCollectionIsOpen ? 'bg-emerald-500' : 'bg-slate-400'
+                            }`}
+                            aria-hidden="true"
+                          />
+                          <span>
+                            {currentCollectionIsOpen
+                              ? '進行催繳中'
+                              : currentCollection.status === 'closed'
+                              ? '已手動結案'
+                              : '已逾截止日'}
+                          </span>
                         </span>
 
                         {currentCollectionIsOpen ? (
@@ -790,10 +795,11 @@ export const AdminFinances: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setFeeStatusFilter('all')}
-                        className={`p-3.5 rounded-2xl text-center transition-colors cursor-pointer border-2 ${
+                        aria-pressed={feeStatusFilter === 'all'}
+                        className={`p-3.5 rounded-2xl text-center transition-colors cursor-pointer ${
                           feeStatusFilter === 'all'
-                            ? 'bg-slate-100/90 border-slate-900 text-slate-900'
-                            : 'bg-white hover:bg-slate-50 border-slate-200/80 text-slate-600'
+                            ? 'bg-slate-100 text-slate-900'
+                            : 'bg-slate-50/70 hover:bg-slate-100 text-slate-600'
                         }`}
                       >
                         <div className="text-[11px] font-bold text-slate-500">
@@ -811,20 +817,21 @@ export const AdminFinances: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setFeeStatusFilter('paid')}
-                        className={`p-3.5 rounded-2xl text-center transition-colors cursor-pointer border-2 ${
+                        aria-pressed={feeStatusFilter === 'paid'}
+                        className={`p-3.5 rounded-2xl text-center transition-colors cursor-pointer ${
                           feeStatusFilter === 'paid'
-                            ? 'bg-emerald-50 border-emerald-600 text-emerald-900'
-                            : 'bg-white hover:bg-emerald-50/30 border-slate-200/80 text-slate-600'
+                            ? 'bg-emerald-100/80 text-slate-900'
+                            : 'bg-emerald-50/60 hover:bg-emerald-100/70 text-slate-600'
                         }`}
                       >
-                        <div className="text-[11px] font-bold text-emerald-700 flex items-center justify-center gap-1">
+                        <div className="text-[11px] font-bold text-emerald-700/80 flex items-center justify-center gap-1">
                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                           <span>已對帳繳清</span>
                         </div>
-                        <div className="text-xl font-black text-emerald-700 tracking-tight mt-0.5">
-                          {paidRecords.length} <span className="text-xs font-normal text-emerald-600/80">人</span>
+                        <div className="text-xl font-black text-emerald-700/80 tracking-tight mt-0.5">
+                          {paidRecords.length} <span className="text-xs font-normal text-emerald-700/70">人</span>
                         </div>
-                        <div className="text-[11px] text-emerald-600 font-medium mt-0.5">
+                        <div className="text-[11px] text-slate-500 font-medium mt-0.5">
                           已收 ${totalPaidAmount.toLocaleString()}
                         </div>
                       </button>
@@ -833,20 +840,21 @@ export const AdminFinances: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setFeeStatusFilter('pending')}
-                        className={`p-3.5 rounded-2xl text-center transition-colors cursor-pointer border-2 ${
+                        aria-pressed={feeStatusFilter === 'pending'}
+                        className={`p-3.5 rounded-2xl text-center transition-colors cursor-pointer ${
                           feeStatusFilter === 'pending'
-                            ? 'bg-amber-50 border-amber-500 text-amber-900'
-                            : 'bg-white hover:bg-amber-50/30 border-slate-200/80 text-slate-600'
+                            ? 'bg-amber-100/80 text-slate-900'
+                            : 'bg-amber-50/60 hover:bg-amber-100/70 text-slate-600'
                         }`}
                       >
-                        <div className="text-[11px] font-bold text-amber-700 flex items-center justify-center gap-1">
+                        <div className="text-[11px] font-bold text-amber-700/80 flex items-center justify-center gap-1">
                           <Clock className="w-3.5 h-3.5 text-amber-600" />
                           <span>待對帳審核</span>
                         </div>
-                        <div className="text-xl font-black text-amber-800 tracking-tight mt-0.5">
-                          {pendingRecordsCol.length} <span className="text-xs font-normal text-amber-700/80">人</span>
+                        <div className="text-xl font-black text-amber-700/80 tracking-tight mt-0.5">
+                          {pendingRecordsCol.length} <span className="text-xs font-normal text-amber-700/70">人</span>
                         </div>
-                        <div className="text-[11px] text-amber-600 font-medium mt-0.5">
+                        <div className="text-[11px] text-slate-500 font-medium mt-0.5">
                           隊員已回報匯款
                         </div>
                       </button>
@@ -855,29 +863,30 @@ export const AdminFinances: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setFeeStatusFilter('unpaid')}
-                        className={`p-3.5 rounded-2xl text-center transition-colors cursor-pointer border-2 ${
+                        aria-pressed={feeStatusFilter === 'unpaid'}
+                        className={`p-3.5 rounded-2xl text-center transition-colors cursor-pointer ${
                           feeStatusFilter === 'unpaid'
-                            ? 'bg-rose-50 border-rose-600 text-rose-900'
-                            : 'bg-white hover:bg-rose-50/30 border-slate-200/80 text-slate-600'
+                            ? 'bg-rose-100/80 text-slate-900'
+                            : 'bg-rose-50/60 hover:bg-rose-100/70 text-slate-600'
                         }`}
                       >
-                        <div className="text-[11px] font-bold text-rose-700 flex items-center justify-center gap-1">
+                        <div className="text-[11px] font-bold text-rose-700/80 flex items-center justify-center gap-1">
                           <XCircle className="w-3.5 h-3.5 text-rose-600" />
                           <span>尚未繳納</span>
                         </div>
-                        <div className="text-xl font-black text-rose-700 tracking-tight mt-0.5">
-                          {unpaidRecordsCol.length} <span className="text-xs font-normal text-rose-600/80">人</span>
+                        <div className="text-xl font-black text-rose-700/80 tracking-tight mt-0.5">
+                          {unpaidRecordsCol.length} <span className="text-xs font-normal text-rose-700/70">人</span>
                         </div>
-                        <div className="text-[11px] text-rose-600 font-medium mt-0.5">
+                        <div className="text-[11px] text-slate-500 font-medium mt-0.5">
                           尚欠 ${strictlyUnpaidAmount.toLocaleString()}
                         </div>
                       </button>
                     </div>
 
                     {unpaidRecordsCol.length > 0 && (
-                      <div className="rounded-2xl border border-rose-200 bg-rose-50/80 p-3.5">
-                        <div className="flex items-center gap-2 text-xs font-black text-rose-800">
-                          <AlertCircle className="h-4 w-4 shrink-0" />
+                      <div className="rounded-2xl bg-rose-50/70 p-3.5">
+                        <div className="flex items-center gap-2 text-xs font-black text-slate-800">
+                          <AlertCircle className="h-4 w-4 text-rose-600 shrink-0" />
                           <span>尚未繳交名單（{unpaidRecordsCol.length} 人）</span>
                         </div>
                         <div className="mt-2 flex flex-wrap gap-1.5">
@@ -886,7 +895,7 @@ export const AdminFinances: React.FC = () => {
                             return (
                               <span
                                 key={record.id}
-                                className="rounded-full border border-rose-200 bg-white px-2.5 py-1 text-xs font-bold text-rose-700"
+                                className="rounded-lg bg-white px-2.5 py-1 text-xs font-bold text-slate-800"
                               >
                                 {member?.name || member?.username || '未知隊員'}
                               </span>
@@ -904,7 +913,7 @@ export const AdminFinances: React.FC = () => {
                       <div className="text-xs sm:text-sm font-bold text-slate-700 flex items-center gap-1.5">
                         <span>名單清單</span>
                         <span className="text-slate-300">·</span>
-                        <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200/70">
+                        <span className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 ">
                           {feeStatusFilter === 'all' && `全部隊員 (${filteredRecords.length})`}
                           {feeStatusFilter === 'paid' && `已對帳繳清 (${filteredRecords.length})`}
                           {feeStatusFilter === 'pending' && `待審核 (${filteredRecords.length})`}
@@ -942,14 +951,14 @@ export const AdminFinances: React.FC = () => {
                             return (
                               <div
                                 key={r.id}
-                                className="p-4 rounded-2xl border-2 border-amber-300 bg-amber-50/90 text-amber-950 flex flex-col justify-between gap-2.5 shadow-2xs animate-in fade-in"
+                                className="p-4 rounded-2xl bg-amber-50/90 text-amber-950 flex flex-col justify-between gap-2.5 shadow-2xs animate-in fade-in"
                               >
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center space-x-2">
                                     <Clock className="w-4 h-4 text-amber-600 animate-pulse shrink-0" />
                                     <span className="text-sm font-extrabold">{member?.name || '隊員'}</span>
                                   </div>
-                                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-200 text-amber-900 shrink-0">
+                                  <span className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-amber-200 text-slate-800 shrink-0">
                                     隊員已回報匯款
                                   </span>
                                 </div>
@@ -987,7 +996,7 @@ export const AdminFinances: React.FC = () => {
                           return (
                             <div
                               key={r.id}
-                              className={`p-3.5 rounded-2xl border-2 flex items-center justify-between transition-colors ${
+                              className={`p-3.5 rounded-2xl flex items-center justify-between transition-colors ${
                                 r.is_paid
                                   ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
                                   : 'bg-rose-50/70 border-rose-200 text-rose-950'
@@ -1001,8 +1010,8 @@ export const AdminFinances: React.FC = () => {
                                 onClick={() => toggleFeePaidStatus(r.id, !r.is_paid)}
                                 className={`text-xs font-bold px-3 py-1.5 rounded-xl whitespace-nowrap shrink-0 transition-all cursor-pointer ${
                                   r.is_paid 
-                                    ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-300/80' 
-                                    : 'bg-rose-100 hover:bg-rose-200 text-rose-800 border border-rose-300/80'
+                                    ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-800 '
+                                    : 'bg-rose-100 hover:bg-rose-200 text-rose-800 '
                                 }`}
                                 title={r.is_paid ? '點擊取消已繳標記' : '點擊手動變更為已繳'}
                               >
@@ -1108,8 +1117,8 @@ export const AdminFinances: React.FC = () => {
                       <td className="p-4 sm:p-5 text-slate-500 font-mono font-medium whitespace-nowrap">{item.move_date}</td>
                       <td className="p-4 sm:p-5 font-bold text-slate-900 min-w-[120px] text-sm sm:text-base">{item.title}</td>
                       <td className="p-4 sm:p-5 whitespace-nowrap">
-                        <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap shrink-0 ${
-                          item.type === 'income' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'
+                        <span className={`inline-block px-3 py-1 rounded-lg text-xs font-bold whitespace-nowrap shrink-0 ${
+                          item.type === 'income' ? 'bg-emerald-50 text-emerald-700 ' : 'bg-rose-50 text-rose-700 '
                         }`}>
                           {item.type === 'income' ? '收入' : '支出'}
                         </span>

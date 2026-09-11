@@ -23,6 +23,7 @@ export const Login: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loginSuccessName, setLoginSuccessName] = useState('');
 
   const resetMessages = () => {
     setErrorMessage('');
@@ -65,6 +66,7 @@ export const Login: React.FC = () => {
         return;
       }
 
+      window.sessionStorage.setItem('goodminton-login-transition', String(Date.now()));
       const { data: authData, error: authError } = await supabase.auth.setSession({
         access_token: loginResult.accessToken,
         refresh_token: loginResult.refreshToken,
@@ -109,10 +111,16 @@ export const Login: React.FC = () => {
       }
 
       setSuccessMessage(`認證成功，歡迎回來 ${profile.name}！`);
+      const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      if (!reduceMotion) {
+        setLoginSuccessName(profile.name);
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 1750));
+      }
       navigate(profile.role === 'admin' ? '/admin/dashboard' : '/member/dashboard', { replace: true });
     } catch (error: unknown) {
       setErrorMessage(describeSupabaseError('登入', error));
     } finally {
+      window.sessionStorage.removeItem('goodminton-login-transition');
       setLoading(false);
     }
   };
@@ -193,8 +201,14 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 p-4 sm:p-6">
-      <div className="w-full max-w-md space-y-6 rounded-3xl border border-slate-200/90 bg-white p-6 shadow-xs sm:p-9">
+    <div className="login-page relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-slate-50 p-4 sm:p-6">
+      {loginSuccessName && <BadmintonLoginSuccess name={loginSuccessName} />}
+      <div aria-hidden="true" className="login-court-lines">
+        <span className="login-court-center-line" />
+        <span className="login-court-service-line login-court-service-line-left" />
+        <span className="login-court-service-line login-court-service-line-right" />
+      </div>
+      <div className="login-card-enter relative z-10 w-full max-w-md space-y-6 rounded-3xl border border-slate-200/90 bg-white p-6 shadow-xs sm:p-9">
         <div>
           <h1 className="text-2xl font-black tracking-tight text-slate-900">Goodminton</h1>
           <p className="mt-0.5 text-xs font-medium text-slate-500">羽球隊管理平台</p>
@@ -320,6 +334,57 @@ export const Login: React.FC = () => {
     </div>
   );
 };
+
+const ShuttlecockGraphic: React.FC<{ className?: string }> = ({ className = '' }) => (
+  <svg viewBox="0 0 220 224" className={className} role="img" aria-label="羽球">
+    <defs>
+      <linearGradient id="shuttle-feather" x1="0" y1="0" x2="0.9" y2="1">
+        <stop offset="0" stopColor="#ffffff" />
+        <stop offset="1" stopColor="#eef2f7" />
+      </linearGradient>
+      <linearGradient id="shuttle-cork" x1="0.15" y1="0" x2="0.85" y2="1">
+        <stop offset="0" stopColor="#ffffff" />
+        <stop offset="1" stopColor="#d9e0e9" />
+      </linearGradient>
+    </defs>
+
+    <path d="M62 137 91 43q5-18 19-15 16 4 12 21l-43 99Z" fill="url(#shuttle-feather)" stroke="#cbd5e1" strokeWidth="3" />
+    <path d="m70 143 48-91q9-17 22-10 14 8 6 23l-59 88Z" fill="#f8fafc" stroke="#cbd5e1" strokeWidth="3" />
+    <path d="m78 148 67-79q12-14 24-4 12 11 1 24l-75 71Z" fill="url(#shuttle-feather)" stroke="#cbd5e1" strokeWidth="3" />
+    <path d="m86 154 82-61q15-11 25 2 10 14-5 24l-89 47Z" fill="#f8fafc" stroke="#cbd5e1" strokeWidth="3" />
+    <path d="m92 161 93-36q17-7 23 8 6 16-12 22l-99 19Z" fill="url(#shuttle-feather)" stroke="#cbd5e1" strokeWidth="3" />
+
+    <g fill="none" stroke="#64748b" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m98 38-29 118m62-105L76 163m82-88-74 96m96-66-88 73m105-42-97 49" strokeWidth="4" />
+      <path d="m62 126 47 42m-52-27 41 37m-46-20 35 31" strokeWidth="4.5" />
+    </g>
+
+    <path d="m55 145 48 37-11 15-49-39Z" fill="#2dd4a7" stroke="#e6fffa" strokeWidth="3" />
+    <path d="m43 157 49 40-10 12q-14 17-34 10-21-7-25-25-3-13 7-25Z" fill="url(#shuttle-cork)" stroke="#cbd5e1" strokeWidth="3.5" />
+    <path d="m35 166 47 38" fill="none" stroke="#ffffff" strokeLinecap="round" strokeWidth="4" opacity=".9" />
+  </svg>
+);
+
+const BadmintonLoginSuccess: React.FC<{ name: string }> = ({ name }) => (
+  <div className="login-success-overlay fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-slate-950" role="status" aria-live="assertive">
+    <div aria-hidden="true" className="login-speed-line login-speed-line-one" />
+    <div aria-hidden="true" className="login-speed-line login-speed-line-two" />
+    <div aria-hidden="true" className="login-speed-line login-speed-line-three" />
+    <div aria-hidden="true" className="login-impact-ring" />
+    <div aria-hidden="true" className="login-shuttle-flight">
+      <div className="login-shuttle-arc">
+        <div className="login-shuttle-orientation">
+          <ShuttlecockGraphic className="h-20 w-20 drop-shadow-[0_0_16px_rgba(52,211,153,0.65)] sm:h-24 sm:w-24" />
+        </div>
+      </div>
+    </div>
+    <div className="login-success-copy relative z-10 text-center">
+      <div className="text-xs font-black tracking-[0.35em] text-emerald-400">SMASH!</div>
+      <div className="mt-2 text-3xl font-black tracking-tight text-white sm:text-4xl">登入成功</div>
+      <div className="mt-2 text-sm font-semibold text-slate-300">歡迎回來，{name}</div>
+    </div>
+  </div>
+);
 
 const Field: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
   <div>

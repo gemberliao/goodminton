@@ -239,9 +239,6 @@ export const AdminMembers: React.FC = () => {
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
-            <span className="px-3 py-1 rounded-full text-xs sm:text-sm font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-              管理員專區
-            </span>
             <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">隊員與權限管理</h1>
           </div>
           <p className="text-sm text-slate-500 mt-1.5">任何人都可在登入頁送出註冊；管理員在這裡核准、退回、重設密碼或完整刪除帳號。</p>
@@ -323,7 +320,7 @@ export const AdminMembers: React.FC = () => {
                   <tr key={member.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="p-4 sm:p-5"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-800 font-black flex items-center justify-center">{member.name.substring(0, 1)}</div><div><div className="font-bold text-slate-900">{member.name}{isSelf ? '（你）' : ''}</div><div className="text-xs text-slate-400">@{member.username}</div></div></div></td>
                     <td className="p-4 sm:p-5 whitespace-nowrap">
-                      <span className={`px-3 py-1 rounded-full text-xs font-bold border inline-flex items-center gap-1.5 ${member.status === 'approved' ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : member.status === 'pending' ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-rose-100 text-rose-800 border-rose-200'}`}>
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold inline-flex items-center gap-1.5 ${member.status === 'approved' ? 'bg-emerald-100 text-emerald-800 ' : member.status === 'pending' ? 'bg-amber-100 text-amber-800 ' : 'bg-rose-100 text-rose-800 '}`}>
                         {member.status === 'approved' ? <CheckCircle2 className="w-3.5 h-3.5" /> : member.status === 'pending' ? <Clock className="w-3.5 h-3.5" /> : <UserX className="w-3.5 h-3.5" />}{member.status === 'approved' ? '已核准' : member.status === 'pending' ? '待審核' : '已退回'}
                       </span>
                     </td>
