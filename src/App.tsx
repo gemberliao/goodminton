@@ -26,6 +26,10 @@ const REALTIME_TABLES = new Set([
   'match_surveys',
   'match_lineup_configs',
   'match_lineup_slots',
+  'game_results',
+  'coin_wallets',
+  'shop_purchases',
+  'game_loadouts',
   'finances',
   'fee_collections',
   'fee_records'

@@ -4,7 +4,7 @@ import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import { useAppStore } from '../../store/useAppStore';
 import { BadmintonEvent, EventType } from '../../types';
-import { formatTimeRange } from '../../utils/dateUtils';
+import { formatTimeRange, isEventPast } from '../../utils/dateUtils';
 import { 
   Calendar as CalendarIcon, 
   Plus, 
@@ -20,7 +20,8 @@ import {
   FileText,
   Trophy,
   Sparkles,
-  History
+  History,
+  Eye
 } from 'lucide-react';
 import { AdminMatchLineupModal } from '../../components/match/AdminMatchLineupModal';
 
@@ -63,6 +64,7 @@ const getInitialDefaults = (): EventDefaults => {
 export const AdminEvents: React.FC = () => {
   const { events, addEvent, updateEvent, deleteEvent, matchSurveys, matchLineupSlots } = useAppStore();
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
+  const [eventScope, setEventScope] = useState<'all' | 'upcoming' | 'past' | 'pastMatches'>('all');
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -197,6 +199,29 @@ export const AdminEvents: React.FC = () => {
     });
   }, [events]);
 
+  const scopedEvents = useMemo(() => {
+    return uniqueEvents
+      .filter((event) => {
+        if (eventScope === 'upcoming') return !isEventPast(event);
+        if (eventScope === 'past') return isEventPast(event);
+        if (eventScope === 'pastMatches') return isEventPast(event) && event.event_type === '比賽';
+        return true;
+      })
+      .sort((a, b) => {
+        const dateOrder = a.event_date.localeCompare(b.event_date);
+        return eventScope === 'past' || eventScope === 'pastMatches' ? -dateOrder : dateOrder;
+      });
+  }, [eventScope, uniqueEvents]);
+
+  const editingEvent = editingEventId
+    ? uniqueEvents.find((event) => event.id === editingEventId)
+    : undefined;
+
+  const openLineupManager = (event: BadmintonEvent) => {
+    setIsModalOpen(false);
+    setSelectedMatchEvent(event);
+  };
+
   // Convert store events to FullCalendar format
   const calendarEvents = uniqueEvents.map((e) => ({
     id: e.id,
@@ -284,17 +309,54 @@ export const AdminEvents: React.FC = () => {
           />
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {uniqueEvents.map((evt) => (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2 bg-white border border-slate-200/80 rounded-2xl p-2 shadow-2xs">
+            {([
+              ['all', `全部 (${uniqueEvents.length})`],
+              ['upcoming', `即將進行 (${uniqueEvents.filter((event) => !isEventPast(event)).length})`],
+              ['past', `已結束 (${uniqueEvents.filter((event) => isEventPast(event)).length})`],
+              ['pastMatches', `已結束比賽 (${uniqueEvents.filter((event) => isEventPast(event) && event.event_type === '比賽').length})`]
+            ] as const).map(([scope, label]) => (
+              <button
+                key={scope}
+                type="button"
+                onClick={() => setEventScope(scope)}
+                className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-colors ${
+                  eventScope === scope
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {scopedEvents.length === 0 ? (
+            <div className="bg-white border border-slate-200/80 rounded-3xl p-10 text-center text-sm text-slate-500 shadow-2xs">
+              {eventScope === 'pastMatches'
+                ? '目前沒有已結束的比賽。'
+                : `目前沒有${eventScope === 'past' ? '已結束' : eventScope === 'upcoming' ? '即將進行' : ''}的活動。`}
+            </div>
+          ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {scopedEvents.map((evt) => (
             <div
               key={evt.id}
               className="bg-white border border-slate-200/80 rounded-3xl p-5 sm:p-6 shadow-2xs space-y-4 hover:border-slate-300 transition-all"
             >
               <div className="flex items-start justify-between">
                 <div>
-                  <span className="px-3 py-0.5 text-xs font-bold rounded-full bg-emerald-50 text-emerald-700 ">
-                    {evt.event_type}
-                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="px-3 py-0.5 text-xs font-bold rounded-full bg-emerald-50 text-emerald-700 ">
+                      {evt.event_type}
+                    </span>
+                    {isEventPast(evt) && (
+                      <span className="px-3 py-0.5 text-xs font-bold rounded-full bg-slate-100 text-slate-600">
+                        已結束
+                      </span>
+                    )}
+                  </div>
                   <h3 className="text-lg font-bold text-slate-900 mt-1.5 tracking-tight">{evt.title}</h3>
                 </div>
                 <div className="flex items-center space-x-1.5">
@@ -356,16 +418,24 @@ export const AdminEvents: React.FC = () => {
                   </span>
                   <button
                     type="button"
-                    onClick={() => setSelectedMatchEvent(evt)}
+                    onClick={() => openLineupManager(evt)}
                     className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-2xs transition-all active:scale-95 flex items-center space-x-1.5"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
-                    <span>排點管理系統</span>
+                    <span>
+                      {isEventPast(evt)
+                        ? matchLineupSlots.some((slot) => slot.event_id === evt.id)
+                          ? '查看／編輯排點'
+                          : '補排並發布名單'
+                        : '排點管理系統'}
+                    </span>
                   </button>
                 </div>
               )}
             </div>
           ))}
+          </div>
+          )}
         </div>
       )}
 
@@ -554,23 +624,34 @@ export const AdminEvents: React.FC = () => {
               </div>
 
               {/* Fixed Footer */}
-              <div className="p-3.5 sm:p-5 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-2 shrink-0">
-                {editingEventId ? (
-                  <button
-                    type="button"
-                    disabled={deletingEventId === editingEventId}
-                    onClick={async () => {
-                      const deleted = await handleDeleteEvent(editingEventId, title);
-                      if (deleted) setIsModalOpen(false);
-                    }}
-                    className="px-3 sm:px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-xl text-xs sm:text-sm flex items-center space-x-1.5 border border-rose-200 transition-colors shrink-0 cursor-pointer active:scale-95"
-                  >
-                    <Trash2 className="w-4 h-4 text-rose-600 shrink-0" />
-                    <span>刪除活動</span>
-                  </button>
-                ) : (
-                  <div />
-                )}
+              <div className="p-3.5 sm:p-5 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  {editingEventId && (
+                    <button
+                      type="button"
+                      disabled={deletingEventId === editingEventId}
+                      onClick={async () => {
+                        const deleted = await handleDeleteEvent(editingEventId, title);
+                        if (deleted) setIsModalOpen(false);
+                      }}
+                      className="px-3 sm:px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-xl text-xs sm:text-sm flex items-center space-x-1.5 border border-rose-200 transition-colors shrink-0 cursor-pointer active:scale-95"
+                    >
+                      <Trash2 className="w-4 h-4 text-rose-600 shrink-0" />
+                      <span>刪除活動</span>
+                    </button>
+                  )}
+
+                  {editingEvent?.event_type === '比賽' && (
+                    <button
+                      type="button"
+                      onClick={() => openLineupManager(editingEvent)}
+                      className="px-3 sm:px-4 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold rounded-xl text-xs sm:text-sm flex items-center space-x-1.5 border border-amber-200 transition-colors shrink-0 cursor-pointer active:scale-95"
+                    >
+                      <Eye className="w-4 h-4 shrink-0" />
+                      <span>{isEventPast(editingEvent) ? '查看／編輯排點' : '管理排點'}</span>
+                    </button>
+                  )}
+                </div>
 
                 <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
                   <button

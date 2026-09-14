@@ -81,6 +81,41 @@ export interface MatchLineupConfig {
   updated_at: string;
 }
 
+export type ShuttleGameResultType = 'win' | 'loss';
+
+export interface ShuttleGameResult {
+  id: string;
+  user_id: string;
+  result: ShuttleGameResultType;
+  player_score: number;
+  cpu_score: number;
+  played_at: string;
+}
+
+export interface CoinWallet {
+  user_id: string;
+  balance: number;
+  updated_at: string;
+}
+
+export interface ShopPurchase {
+  id: string;
+  user_id: string;
+  item_id: string;
+  price: number;
+  purchased_at: string;
+}
+
+export type RacketStyle = 'classic' | 'emerald' | 'sunset' | 'gold';
+export type ShuttleStyle = 'classic' | 'sky' | 'rose' | 'neon';
+
+export interface GameLoadout {
+  user_id: string;
+  racket_style: RacketStyle;
+  shuttle_style: ShuttleStyle;
+  updated_at: string;
+}
+
 export type FinanceType = 'income' | 'expense';
 
 export interface FinanceLedger {

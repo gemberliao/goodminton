@@ -87,6 +87,43 @@ create table if not exists public.match_lineup_slots (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.game_results (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  result text not null check (result in ('win', 'loss')),
+  player_score integer not null check (player_score between 0 and 3),
+  cpu_score integer not null check (cpu_score between 0 and 3),
+  played_at timestamptz not null default now(),
+  constraint game_result_has_winner check (
+    (result = 'win' and player_score = 3 and cpu_score < 3)
+    or (result = 'loss' and cpu_score = 3 and player_score < 3)
+  )
+);
+
+create table if not exists public.coin_wallets (
+  user_id uuid primary key references public.profiles(id) on delete cascade,
+  balance integer not null default 0 check (balance >= 0),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.shop_purchases (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  item_id text not null,
+  price integer not null check (price > 0),
+  purchased_at timestamptz not null default now(),
+  constraint unique_shop_purchase unique (user_id, item_id)
+);
+
+create table if not exists public.game_loadouts (
+  user_id uuid primary key references public.profiles(id) on delete cascade,
+  racket_style text not null default 'classic'
+    check (racket_style in ('classic', 'emerald', 'sunset', 'gold')),
+  shuttle_style text not null default 'classic'
+    check (shuttle_style in ('classic', 'sky', 'rose', 'neon')),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.finances (
   id uuid primary key default gen_random_uuid(),
   move_date date not null default current_date,
@@ -344,6 +381,9 @@ create index if not exists idx_attendance_user on public.attendance(user_id);
 create index if not exists idx_match_surveys_event on public.match_surveys(event_id);
 create index if not exists idx_match_surveys_user on public.match_surveys(user_id);
 create index if not exists idx_match_lineup_slots_event on public.match_lineup_slots(event_id);
+create index if not exists idx_game_results_user_played on public.game_results(user_id, played_at desc);
+create index if not exists idx_game_results_played on public.game_results(played_at desc);
+create index if not exists idx_shop_purchases_user on public.shop_purchases(user_id, purchased_at desc);
 create index if not exists idx_finances_date on public.finances(move_date);
 create index if not exists idx_fee_records_user on public.fee_records(user_id);
 create index if not exists idx_fee_records_collection on public.fee_records(collection_id);
@@ -449,6 +489,10 @@ revoke all on table
   public.match_surveys,
   public.match_lineup_configs,
   public.match_lineup_slots,
+  public.game_results,
+  public.coin_wallets,
+  public.shop_purchases,
+  public.game_loadouts,
   public.finances,
   public.fee_collections,
   public.fee_records
@@ -461,10 +505,14 @@ grant select, insert, update, delete on table
   public.match_surveys,
   public.match_lineup_configs,
   public.match_lineup_slots,
+  public.game_results,
   public.finances,
   public.fee_collections,
   public.fee_records
 to authenticated, service_role;
+
+grant select on table public.coin_wallets, public.shop_purchases, public.game_loadouts to authenticated;
+grant select, insert, update, delete on table public.coin_wallets, public.shop_purchases, public.game_loadouts to service_role;
 
 do $secure_policies$
 declare
@@ -473,7 +521,8 @@ declare
 begin
   foreach table_name in array array[
     'profiles', 'events', 'attendance', 'match_surveys',
-    'match_lineup_configs', 'match_lineup_slots', 'finances',
+    'match_lineup_configs', 'match_lineup_slots', 'game_results',
+    'coin_wallets', 'shop_purchases', 'game_loadouts', 'finances',
     'fee_collections', 'fee_records'
   ]
   loop
@@ -676,6 +725,27 @@ create policy lineup_configs_admin_all on public.match_lineup_configs for all to
 create policy lineup_slots_read on public.match_lineup_slots for select to authenticated using (public.goodminton_is_approved());
 create policy lineup_slots_admin_all on public.match_lineup_slots for all to authenticated using (public.goodminton_is_admin()) with check (public.goodminton_is_admin());
 
+-- Completed games are append-only for members. Administrators can inspect
+-- every team result; members can only read and create their own records.
+create policy game_results_admin_all on public.game_results for all to authenticated
+  using (public.goodminton_is_admin()) with check (public.goodminton_is_admin());
+create policy game_results_member_read on public.game_results for select to authenticated
+  using (user_id = public.goodminton_current_profile_id());
+create policy game_results_member_insert on public.game_results for insert to authenticated
+  with check (user_id = public.goodminton_current_profile_id());
+create policy coin_wallets_admin_read on public.coin_wallets for select to authenticated
+  using (public.goodminton_is_admin());
+create policy coin_wallets_member_read on public.coin_wallets for select to authenticated
+  using (user_id = public.goodminton_current_profile_id());
+create policy shop_purchases_admin_read on public.shop_purchases for select to authenticated
+  using (public.goodminton_is_admin());
+create policy shop_purchases_member_read on public.shop_purchases for select to authenticated
+  using (user_id = public.goodminton_current_profile_id());
+create policy game_loadouts_admin_read on public.game_loadouts for select to authenticated
+  using (public.goodminton_is_admin());
+create policy game_loadouts_member_read on public.game_loadouts for select to authenticated
+  using (user_id = public.goodminton_current_profile_id());
+
 -- Attendance and surveys remain writable by a member only for themselves and
 -- only before the activity end time. Admins may manage them at any time.
 create policy attendance_read on public.attendance for select to authenticated using (public.goodminton_is_approved());
@@ -742,6 +812,150 @@ create trigger goodminton_protect_fee_record_change
   before update on public.fee_records
   for each row execute function public.goodminton_protect_fee_record_change();
 
+create or replace function public.goodminton_award_game_win_coin()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+begin
+  if new.result = 'win' then
+    insert into public.coin_wallets (user_id, balance, updated_at)
+    values (new.user_id, 1, now())
+    on conflict (user_id) do update
+      set balance = public.coin_wallets.balance + 1,
+          updated_at = now();
+  end if;
+  return new;
+end
+$function$;
+
+revoke all on function public.goodminton_award_game_win_coin() from public, anon, authenticated;
+drop trigger if exists goodminton_award_game_win_coin on public.game_results;
+create trigger goodminton_award_game_win_coin
+  after insert on public.game_results
+  for each row execute function public.goodminton_award_game_win_coin();
+
+insert into public.coin_wallets (user_id, balance, updated_at)
+select user_id, count(*)::integer, now()
+from public.game_results
+where result = 'win'
+group by user_id
+on conflict (user_id) do nothing;
+
+create or replace function public.goodminton_buy_shop_item(target_item_id text)
+returns integer
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  buyer_id uuid := public.goodminton_current_profile_id();
+  item_price integer;
+  new_balance integer;
+begin
+  if buyer_id is null then
+    raise exception 'PROFILE_NOT_FOUND' using errcode = '42501';
+  end if;
+  item_price := case target_item_id
+    when 'racket_emerald' then 2
+    when 'racket_sunset' then 5
+    when 'racket_gold' then 10
+    when 'shuttle_sky' then 2
+    when 'shuttle_rose' then 5
+    when 'shuttle_neon' then 10
+    else null
+  end;
+  if item_price is null then
+    raise exception 'UNKNOWN_SHOP_ITEM' using errcode = '22023';
+  end if;
+  if exists (
+    select 1 from public.shop_purchases
+    where user_id = buyer_id and item_id = target_item_id
+  ) then
+    raise exception 'ITEM_ALREADY_OWNED' using errcode = '23505';
+  end if;
+
+  insert into public.coin_wallets (user_id, balance, updated_at)
+  values (buyer_id, 0, now())
+  on conflict (user_id) do nothing;
+  update public.coin_wallets
+  set balance = balance - item_price,
+      updated_at = now()
+  where user_id = buyer_id and balance >= item_price
+  returning balance into new_balance;
+  if new_balance is null then
+    raise exception 'INSUFFICIENT_COINS' using errcode = 'P0001';
+  end if;
+
+  insert into public.shop_purchases (user_id, item_id, price)
+  values (buyer_id, target_item_id, item_price);
+  return new_balance;
+end
+$function$;
+
+revoke all on function public.goodminton_buy_shop_item(text) from public, anon;
+grant execute on function public.goodminton_buy_shop_item(text) to authenticated, service_role;
+
+create or replace function public.goodminton_equip_game_item(target_item_id text)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  buyer_id uuid := public.goodminton_current_profile_id();
+  item_category text;
+  selected_style text;
+  requires_purchase boolean := true;
+begin
+  if buyer_id is null then
+    raise exception 'PROFILE_NOT_FOUND' using errcode = '42501';
+  end if;
+
+  select mapped.category, mapped.style, mapped.owned
+  into item_category, selected_style, requires_purchase
+  from (values
+    ('racket_default', 'racket', 'classic', false),
+    ('racket_emerald', 'racket', 'emerald', true),
+    ('racket_sunset', 'racket', 'sunset', true),
+    ('racket_gold', 'racket', 'gold', true),
+    ('shuttle_default', 'shuttle', 'classic', false),
+    ('shuttle_sky', 'shuttle', 'sky', true),
+    ('shuttle_rose', 'shuttle', 'rose', true),
+    ('shuttle_neon', 'shuttle', 'neon', true)
+  ) as mapped(item_id, category, style, owned)
+  where mapped.item_id = target_item_id;
+
+  if item_category is null then
+    raise exception 'UNKNOWN_SHOP_ITEM' using errcode = '22023';
+  end if;
+  if requires_purchase and not exists (
+    select 1 from public.shop_purchases
+    where user_id = buyer_id and item_id = target_item_id
+  ) then
+    raise exception 'ITEM_NOT_OWNED' using errcode = '42501';
+  end if;
+
+  insert into public.game_loadouts (user_id)
+  values (buyer_id)
+  on conflict (user_id) do nothing;
+
+  if item_category = 'racket' then
+    update public.game_loadouts
+    set racket_style = selected_style, updated_at = now()
+    where user_id = buyer_id;
+  else
+    update public.game_loadouts
+    set shuttle_style = selected_style, updated_at = now()
+    where user_id = buyer_id;
+  end if;
+end
+$function$;
+
+revoke all on function public.goodminton_equip_game_item(text) from public, anon;
+grant execute on function public.goodminton_equip_game_item(text) to authenticated, service_role;
+
 -- --------------------------------------------------------------------------
 -- 5. Supabase Realtime replication.
 --    Without this publication membership, postgres_changes subscriptions can
@@ -765,6 +979,10 @@ begin
     'match_surveys',
     'match_lineup_configs',
     'match_lineup_slots',
+    'game_results',
+    'coin_wallets',
+    'shop_purchases',
+    'game_loadouts',
     'finances',
     'fee_collections',
     'fee_records'

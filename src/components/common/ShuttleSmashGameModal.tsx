@@ -1,5 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Gamepad2, RotateCcw, Trophy, X, Zap } from 'lucide-react';
+import { Gamepad2, RotateCcw, ShoppingBag, Trophy, X, Zap } from 'lucide-react';
+import { useAppStore } from '../../store/useAppStore';
+import { GameCosmeticsShop } from './GameCosmeticsShop';
+import { RACKET_VISUALS, SHUTTLE_VISUALS } from './gameCosmetics';
+import type { RacketStyle, ShuttleStyle } from '../../types';
 
 type GamePhase = 'ready' | 'playing' | 'finished';
 type HitQuality = 'none' | 'bad' | 'normal' | 'perfect';
@@ -405,6 +409,11 @@ const isPreciseDefenseIncomingShot = (arena: ArenaState) => arena.shotWasPowerTi
 
 interface ShuttleSmashGameModalProps {
   onClose: () => void;
+  onGameComplete?: (result: {
+    winner: 'player' | 'cpu';
+    playerScore: number;
+    cpuScore: number;
+  }) => void | Promise<void>;
 }
 
 const clamp = (value: number, minimum: number, maximum: number) => Math.max(minimum, Math.min(maximum, value));
@@ -564,10 +573,17 @@ const newServe = (direction: 1 | -1): ShuttleState => ({
   vy: (Math.random() - 0.5) * 0.28,
 });
 
-export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ onClose }) => {
+export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ onClose, onGameComplete }) => {
+  const currentUserId = useAppStore((state) => state.currentUser.id);
+  const equippedLoadout = useAppStore((state) => state.gameLoadouts.find((loadout) => loadout.user_id === state.currentUser.id));
+  const equippedRacketStyle = equippedLoadout?.racket_style || 'classic';
+  const equippedShuttleStyle = equippedLoadout?.shuttle_style || 'classic';
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef(0);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const onGameCompleteRef = useRef(onGameComplete);
+  const racketStyleRef = useRef<RacketStyle>(equippedRacketStyle);
+  const shuttleStyleRef = useRef<ShuttleStyle>(equippedShuttleStyle);
   const phaseRef = useRef<GamePhase>('ready');
   const arenaRef = useRef<ArenaState>({
     playerX: 0.085,
@@ -643,6 +659,16 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
   const [cpuScore, setCpuScore] = useState(0);
   const [winner, setWinner] = useState<'player' | 'cpu' | null>(null);
   const [waitingForServe, setWaitingForServe] = useState(false);
+  const [isShopOpen, setIsShopOpen] = useState(false);
+
+  useEffect(() => {
+    onGameCompleteRef.current = onGameComplete;
+  }, [onGameComplete]);
+
+  useEffect(() => {
+    racketStyleRef.current = equippedRacketStyle;
+    shuttleStyleRef.current = equippedShuttleStyle;
+  }, [currentUserId, equippedRacketStyle, equippedShuttleStyle]);
 
   const playHitSound = (quality: Exclude<HitQuality, 'none'>, isSmash = false, power = 0.65) => {
     const audioContext = audioContextRef.current;
@@ -856,6 +882,11 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
         setWaitingForServe(false);
         setWinner(nextWinner);
         setPhase('finished');
+        void onGameCompleteRef.current?.({
+          winner: nextWinner,
+          playerScore: arena.playerScore,
+          cpuScore: arena.cpuScore
+        });
       } else {
         prepareNextRally(side);
       }
@@ -1678,15 +1709,22 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
       x: number,
       y: number,
       crossSize: number,
-      color: string,
+      frameColor: string,
+      handleColor: string,
+      fillColor: string,
+      glowColor: string,
       isPlayer: boolean,
       portrait: boolean
     ) => {
       ctx.save();
       ctx.translate(x, y);
-      ctx.shadowColor = 'rgba(15, 23, 42, 0.35)';
-      ctx.shadowBlur = 10;
-      ctx.strokeStyle = color;
+      ctx.shadowColor = glowColor;
+      ctx.shadowBlur = isPlayer ? 14 : 9;
+      ctx.fillStyle = fillColor;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, portrait ? crossSize * 0.105 : 10, portrait ? 10 : crossSize * 0.105, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = frameColor;
       ctx.lineWidth = 4;
       ctx.beginPath();
       ctx.ellipse(0, 0, portrait ? crossSize * 0.105 : 10, portrait ? 10 : crossSize * 0.105, 0, 0, Math.PI * 2);
@@ -1719,6 +1757,7 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
       }
       ctx.stroke();
       ctx.globalAlpha = 1;
+      ctx.strokeStyle = handleColor;
       ctx.lineWidth = 5;
       ctx.lineCap = 'round';
       ctx.beginPath();
@@ -1734,12 +1773,14 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
     };
 
     const drawShuttle = (ctx: CanvasRenderingContext2D, x: number, y: number, angle: number) => {
+      const visual = SHUTTLE_VISUALS[shuttleStyleRef.current];
+      const pulse = (Math.sin(performance.now() / 130) + 1) / 2;
       ctx.save();
       ctx.translate(x, y);
       ctx.rotate(angle);
-      ctx.shadowColor = 'rgba(255,255,255,0.6)';
-      ctx.shadowBlur = 9;
-      ctx.fillStyle = '#f8fafc';
+      ctx.shadowColor = visual.glow;
+      ctx.shadowBlur = visual.effectLevel === 0 ? 9 : 12 + visual.effectLevel * 3 + pulse * 4;
+      ctx.fillStyle = visual.feather;
       ctx.beginPath();
       ctx.moveTo(-18, -8);
       ctx.quadraticCurveTo(-22, 0, -18, 8);
@@ -1748,7 +1789,7 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
       ctx.closePath();
       ctx.fill();
       ctx.shadowBlur = 0;
-      ctx.strokeStyle = '#94a3b8';
+      ctx.strokeStyle = visual.stroke;
       ctx.lineWidth = 1.3;
       ctx.beginPath();
       ctx.moveTo(-18, -7);
@@ -1757,15 +1798,42 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
       ctx.moveTo(-15, 0);
       ctx.lineTo(-5, 0);
       ctx.stroke();
-      ctx.fillStyle = '#2dd4bf';
+      ctx.fillStyle = visual.band;
       ctx.fillRect(-6, -4, 5, 8);
-      ctx.fillStyle = '#f1f5f9';
+      ctx.fillStyle = visual.cork;
       ctx.beginPath();
       ctx.arc(4, 0, 6, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = '#cbd5e1';
+      ctx.strokeStyle = visual.stroke;
       ctx.lineWidth = 1.5;
       ctx.stroke();
+
+      if (visual.effectLevel >= 2) {
+        const particleCount = visual.effectLevel === 3 ? 5 : 3;
+        for (let index = 0; index < particleCount; index += 1) {
+          const phase = performance.now() / (190 - visual.effectLevel * 20) + index * 2.1;
+          const particleX = -16 - index * 5 - pulse * 4;
+          const particleY = Math.sin(phase) * (5 + index * 1.2);
+          ctx.globalAlpha = 0.45 + (index % 2) * 0.2;
+          ctx.fillStyle = visual.effectLevel === 3 && index % 2 ? '#e879f9' : visual.stroke;
+          ctx.beginPath();
+          ctx.arc(particleX, particleY, visual.effectLevel === 3 ? 2.1 : 1.7, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      if (visual.effectLevel === 3) {
+        ctx.strokeStyle = pulse > 0.5 ? '#d9f99d' : '#e879f9';
+        ctx.lineWidth = 1.4;
+        ctx.globalAlpha = 0.8;
+        ctx.beginPath();
+        ctx.moveTo(-25, -4);
+        ctx.lineTo(-20, 1);
+        ctx.lineTo(-15, -3);
+        ctx.lineTo(-10, 2);
+        ctx.stroke();
+      }
       ctx.restore();
     };
 
@@ -1988,21 +2056,68 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
         );
         context.stroke();
       });
+      const playerRacketVisual = RACKET_VISUALS[racketStyleRef.current];
       drawRacket(
         context,
         playerPosition.x,
         playerPosition.y,
         portrait ? courtLayout.width : courtLayout.height,
-        '#7dd3fc',
+        playerRacketVisual.frame,
+        playerRacketVisual.handle,
+        playerRacketVisual.fill,
+        playerRacketVisual.glow,
         true,
         portrait
       );
+      if (playerRacketVisual.effectLevel > 0) {
+        const racketRadiusX = portrait ? courtLayout.width * 0.105 : 10;
+        const racketRadiusY = portrait ? 10 : courtLayout.height * 0.105;
+        const effectPulse = (Math.sin(now / (150 - playerRacketVisual.effectLevel * 20)) + 1) / 2;
+        context.save();
+        context.translate(playerPosition.x, playerPosition.y);
+        context.strokeStyle = playerRacketVisual.frame;
+        context.shadowColor = playerRacketVisual.glow;
+        context.shadowBlur = 8 + playerRacketVisual.effectLevel * 5;
+        context.globalAlpha = 0.16 + effectPulse * 0.16;
+        context.lineWidth = 1.5 + playerRacketVisual.effectLevel * 0.45;
+        context.beginPath();
+        context.ellipse(0, 0, racketRadiusX + 4 + effectPulse * 3, racketRadiusY + 4 + effectPulse * 3, 0, 0, Math.PI * 2);
+        context.stroke();
+
+        if (playerRacketVisual.effectLevel >= 2) {
+          const particleCount = playerRacketVisual.effectLevel === 3 ? 8 : 4;
+          for (let index = 0; index < particleCount; index += 1) {
+            const angle = now / (680 - playerRacketVisual.effectLevel * 80) + (Math.PI * 2 * index) / particleCount;
+            const orbitX = Math.cos(angle) * (racketRadiusX + 8 + effectPulse * 3);
+            const orbitY = Math.sin(angle) * (racketRadiusY + 8 + effectPulse * 3);
+            context.globalAlpha = 0.55 + (index % 2) * 0.25;
+            context.fillStyle = playerRacketVisual.effectLevel === 3 && index % 2 ? '#fff7c2' : playerRacketVisual.frame;
+            context.beginPath();
+            context.arc(orbitX, orbitY, playerRacketVisual.effectLevel === 3 ? 2.2 : 1.7, 0, Math.PI * 2);
+            context.fill();
+            if (playerRacketVisual.effectLevel === 3 && index % 2 === 0) {
+              context.strokeStyle = '#fff7c2';
+              context.lineWidth = 1;
+              context.beginPath();
+              context.moveTo(orbitX - 3.5, orbitY);
+              context.lineTo(orbitX + 3.5, orbitY);
+              context.moveTo(orbitX, orbitY - 3.5);
+              context.lineTo(orbitX, orbitY + 3.5);
+              context.stroke();
+            }
+          }
+        }
+        context.restore();
+      }
       drawRacket(
         context,
         cpuPosition.x,
         cpuPosition.y,
         portrait ? courtLayout.width : courtLayout.height,
         '#fda4af',
+        '#be123c',
+        'rgba(253,164,175,0.08)',
+        'rgba(253,164,175,0.45)',
         false,
         portrait
       );
@@ -2032,6 +2147,36 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
         );
         context.fill();
       });
+
+      const shuttleVisual = SHUTTLE_VISUALS[shuttleStyleRef.current];
+      if (shuttleVisual.effectLevel > 0 && arena.trail.length > 1) {
+        context.save();
+        context.shadowColor = shuttleVisual.glow;
+        context.shadowBlur = 5 + shuttleVisual.effectLevel * 4;
+        if (shuttleVisual.effectLevel === 3) {
+          context.strokeStyle = `rgba(${shuttleVisual.trailRgb},0.42)`;
+          context.lineWidth = 2.4;
+          context.beginPath();
+          arena.trail.forEach((point, index) => {
+            const pointPosition = toScreen(point.x, point.y);
+            if (index === 0) context.moveTo(pointPosition.x, pointPosition.y);
+            else context.lineTo(pointPosition.x, pointPosition.y);
+          });
+          context.stroke();
+        }
+        arena.trail.forEach((point, index) => {
+          if (index % Math.max(1, 4 - shuttleVisual.effectLevel) !== 0) return;
+          const pointPosition = toScreen(point.x, point.y);
+          const opacity = ((index + 1) / arena.trail.length) * (0.12 + shuttleVisual.effectLevel * 0.1);
+          context.fillStyle = shuttleVisual.effectLevel === 3 && index % 2
+            ? `rgba(232,121,249,${opacity})`
+            : `rgba(${shuttleVisual.trailRgb},${opacity})`;
+          context.beginPath();
+          context.arc(pointPosition.x, pointPosition.y, 1.5 + shuttleVisual.effectLevel * 0.8, 0, Math.PI * 2);
+          context.fill();
+        });
+        context.restore();
+      }
 
       const shuttlePosition = toScreen(arena.shuttle.x, arena.shuttle.y);
       const flightProgress = clamp((now - arena.flightStartedAt) / arena.flightDuration, 0, 1);
@@ -2247,30 +2392,41 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
         </div>
 
         {phase === 'ready' && (
-          <div className="absolute inset-0 z-30 flex items-center justify-center bg-slate-950 px-6">
-            <button type="button" onClick={onClose} className="absolute right-4 top-4 rounded-xl p-2.5 text-slate-400 transition-colors hover:bg-white/10 hover:text-white" aria-label="關閉遊戲">
+          <div className="absolute inset-0 z-30 overflow-y-auto bg-slate-950 px-4 py-6 sm:px-6">
+            <button type="button" onClick={onClose} className="fixed right-4 top-4 z-10 rounded-xl bg-slate-950/80 p-2.5 text-slate-400 backdrop-blur transition-colors hover:bg-white/10 hover:text-white" aria-label="關閉遊戲">
               <X className="h-5 w-5" />
             </button>
-            <div className="w-full max-w-sm text-center">
-              <Gamepad2 className="mx-auto h-7 w-7 text-emerald-400" />
-              <h1 className="mt-3 text-2xl font-black">羽球電腦對戰</h1>
-              <p className="mx-auto mt-2 max-w-xs text-sm leading-6 text-slate-300">移動游標或手指揮動球拍，在落點圈縮到中心時碰到羽球。</p>
+            <div className="mx-auto flex min-h-full w-full max-w-4xl items-center justify-center py-7">
+              {isShopOpen ? (
+                <GameCosmeticsShop onBack={() => setIsShopOpen(false)} />
+              ) : (
+                <section className="mx-auto w-full max-w-md rounded-3xl border border-white/10 bg-white/[0.035] px-5 py-7 text-center sm:px-7">
+                  <Gamepad2 className="mx-auto h-7 w-7 text-emerald-400" />
+                  <h1 className="mt-3 text-2xl font-black">羽球電腦對戰</h1>
+                  <p className="mx-auto mt-2 max-w-xs text-sm leading-6 text-slate-300">移動游標或手指揮動球拍，在落點圈縮到中心時碰到羽球。</p>
 
-              <div className="mt-6 flex items-center justify-center gap-5 text-xs font-bold">
-                <span className="flex items-center gap-1.5 text-orange-300"><i className="h-2.5 w-2.5 rounded-full bg-orange-400" />橘・差</span>
-                <span className="flex items-center gap-1.5 text-yellow-200"><i className="h-2.5 w-2.5 rounded-full bg-yellow-300" />黃・普通</span>
-                <span className="flex items-center gap-1.5 text-emerald-300"><i className="h-2.5 w-2.5 rounded-full bg-emerald-400" />綠・好</span>
-              </div>
+                  <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs font-bold">
+                    <span className="flex items-center gap-1.5 text-orange-300"><i className="h-2.5 w-2.5 rounded-full bg-orange-400" />橘・差</span>
+                    <span className="flex items-center gap-1.5 text-yellow-200"><i className="h-2.5 w-2.5 rounded-full bg-yellow-300" />黃・普通</span>
+                    <span className="flex items-center gap-1.5 text-emerald-300"><i className="h-2.5 w-2.5 rounded-full bg-emerald-400" />綠・好</span>
+                  </div>
 
-              <div className="mx-auto mt-4 w-fit space-y-1.5 text-left text-xs text-slate-300">
-                <div className="flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-full bg-rose-400" /><span><strong className="text-rose-300">紅圈</strong>：快揮爆殺，慢揮快速近網球</span></div>
-                <div className="flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-full bg-sky-200 shadow-[0_0_6px_rgba(186,230,253,0.8)]" /><span><strong className="text-sky-200">藍白圈</strong>：接爆殺時的精準防守</span></div>
-              </div>
+                  <div className="mx-auto mt-4 w-fit space-y-1.5 text-left text-xs text-slate-300">
+                    <div className="flex items-center gap-2"><i className="h-2.5 w-2.5 shrink-0 rounded-full bg-rose-400" /><span><strong className="text-rose-300">紅圈</strong>：快揮爆殺，慢揮快速近網球</span></div>
+                    <div className="flex items-center gap-2"><i className="h-2.5 w-2.5 shrink-0 rounded-full bg-sky-200 shadow-[0_0_6px_rgba(186,230,253,0.8)]" /><span><strong className="text-sky-200">藍白圈</strong>：接爆殺時的精準防守</span></div>
+                  </div>
 
-              <button type="button" onClick={startGame} className="mt-7 inline-flex items-center gap-2 rounded-xl bg-emerald-400 px-8 py-3.5 text-sm font-black text-slate-950 transition-colors hover:bg-emerald-300 active:scale-95">
-                <Zap className="h-5 w-5 fill-current" />
-                <span>開始遊戲</span>
-              </button>
+                  <button type="button" onClick={startGame} className="mt-7 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-400 px-8 py-3.5 text-sm font-black text-slate-950 transition-colors hover:bg-emerald-300 active:scale-95 sm:w-auto">
+                    <Zap className="h-5 w-5 fill-current" />
+                    <span>開始遊戲</span>
+                  </button>
+
+                  <button type="button" onClick={() => setIsShopOpen(true)} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-slate-900 px-8 py-3.5 text-sm font-black text-white transition-colors hover:border-white/20 hover:bg-slate-800 active:scale-95 sm:w-auto">
+                    <ShoppingBag className="h-4 w-4 text-amber-300" />
+                    <span>裝備商店</span>
+                  </button>
+                </section>
+              )}
             </div>
           </div>
         )}

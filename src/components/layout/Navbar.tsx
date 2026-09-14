@@ -33,7 +33,8 @@ export const Navbar: React.FC<Props> = ({ onToggleSidebar, showSidebarToggle = t
     feeRecords,
     viewedEventIdsByUser,
     viewedFeeRecordIdsByUser,
-    viewedAnnouncementUpdatedAtByUser
+    viewedAnnouncementUpdatedAtByUser,
+    recordGameResult
   } = useAppStore();
   const announcement = useAnnouncementStore(state => state.announcement);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -169,7 +170,6 @@ export const Navbar: React.FC<Props> = ({ onToggleSidebar, showSidebarToggle = t
                 aria-label="開啟羽球反應挑戰"
               >
                 <Gamepad2 className="h-5 w-5 transition-transform group-hover:-rotate-6 group-hover:scale-110" />
-                <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border-2 border-white bg-amber-400" />
               </button>
               {/* User Dropdown */}
               <div className="relative">
@@ -260,7 +260,14 @@ export const Navbar: React.FC<Props> = ({ onToggleSidebar, showSidebarToggle = t
           </div>
         </div>
       </header>
-      {isGameOpen && <ShuttleSmashGameModal onClose={() => setIsGameOpen(false)} />}
+      {isGameOpen && (
+        <ShuttleSmashGameModal
+          onClose={() => setIsGameOpen(false)}
+          onGameComplete={({ winner, playerScore, cpuScore }) => (
+            recordGameResult(winner === 'player' ? 'win' : 'loss', playerScore, cpuScore)
+          )}
+        />
+      )}
     </>
   );
 };

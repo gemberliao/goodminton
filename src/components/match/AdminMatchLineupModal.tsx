@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BadmintonEvent, MatchDiscipline, MatchPointSlot, Profile } from '../../types';
-import { useAppStore } from '../../store/useAppStore';
+import { generateUUID, useAppStore } from '../../store/useAppStore';
 import { 
   X, 
   Trophy, 
@@ -17,8 +17,10 @@ import {
   HeartHandshake, 
   UserCheck, 
   Info,
-  ChevronDown
+  ChevronDown,
+  History
 } from 'lucide-react';
+import { isEventPast } from '../../utils/dateUtils';
 
 interface AdminMatchLineupModalProps {
   isOpen: boolean;
@@ -55,6 +57,7 @@ export const AdminMatchLineupModal: React.FC<AdminMatchLineupModalProps> = ({
   const [notes, setNotes] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'lineup' | 'surveys' | 'stats'>('lineup');
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+  const isPast = isEventPast(event);
 
   // Initialize slots
   useEffect(() => {
@@ -69,7 +72,7 @@ export const AdminMatchLineupModal: React.FC<AdminMatchLineupModalProps> = ({
       } else {
         // Generate default 5 slots
         const defaultSlots: MatchPointSlot[] = POINT_DEFS.map(pd => ({
-          id: `slot-${event.id}-${pd.index}`,
+          id: generateUUID(),
           event_id: event.id,
           point_index: pd.index,
           point_name: pd.name,
@@ -84,7 +87,7 @@ export const AdminMatchLineupModal: React.FC<AdminMatchLineupModalProps> = ({
       }
       setSaveSuccessMsg(null);
     }
-  }, [isOpen, event.id, matchLineupSlots, matchLineupConfigs]);
+  }, [isOpen, event.id]);
 
   if (!isOpen) return null;
 
@@ -149,6 +152,21 @@ export const AdminMatchLineupModal: React.FC<AdminMatchLineupModalProps> = ({
       return a.name.localeCompare(b.name, 'zh-Hant');
     });
   };
+
+  const statsProfiles = [...eligibleProfiles].sort((a, b) => {
+    const statsA = getMemberMatchStats(a.id, event.id);
+    const statsB = getMemberMatchStats(b.id, event.id);
+    if (statsA.historicalPlayedCount !== statsB.historicalPlayedCount) {
+      return statsA.historicalPlayedCount - statsB.historicalPlayedCount;
+    }
+    const assignedA = currentAssignedCounts[a.id] || 0;
+    const assignedB = currentAssignedCounts[b.id] || 0;
+    if (assignedA !== assignedB) return assignedA - assignedB;
+    const isAttA = attendingUserIds.includes(a.id) ? 1 : 0;
+    const isAttB = attendingUserIds.includes(b.id) ? 1 : 0;
+    if (isAttA !== isAttB) return isAttB - isAttA;
+    return a.name.localeCompare(b.name, 'zh-Hant');
+  });
 
   // Handler to update player inside a slot
   const handleSetPlayer = (slotIndex: number, playerIndex: number, newUserId: string) => {
@@ -240,6 +258,12 @@ export const AdminMatchLineupModal: React.FC<AdminMatchLineupModalProps> = ({
           <h2 className="text-lg sm:text-2xl font-bold text-slate-900 tracking-tight line-clamp-1">
             {event.title}
           </h2>
+          {isPast && (
+            <div className="mt-2.5 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
+              <History className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+              <span>此比賽已結束，管理員仍可查看、修改並重新發布排點名單。</span>
+            </div>
+          )}
         </div>
 
         {/* Tab Navigation & Auto Fair Engine Action Bar */}
@@ -610,7 +634,7 @@ export const AdminMatchLineupModal: React.FC<AdminMatchLineupModalProps> = ({
           {/* TAB 3: Fairness & Rotation Stats */}
           {activeTab === 'stats' && (
             <div className="space-y-3">
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 text-sm text-slate-700 leading-relaxed">
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 sm:p-5 text-xs sm:text-sm text-slate-700 leading-relaxed">
                 <div className="font-bold flex items-center space-x-2 text-slate-900 mb-1.5">
                   <ShieldCheck className="w-5 h-5 text-slate-600" />
                   <span>公平出賽與輪替原則：</span>
@@ -622,7 +646,72 @@ export const AdminMatchLineupModal: React.FC<AdminMatchLineupModalProps> = ({
                 </p>
               </div>
 
-              <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white">
+              {/* Mobile: information cards keep every field readable without a squeezed table. */}
+              <div className="sm:hidden space-y-2.5">
+                {statsProfiles.map((p) => {
+                  const isAtt = attendingUserIds.includes(p.id);
+                  const srv = surveyMap.get(p.id);
+                  const stats = getMemberMatchStats(p.id, event.id);
+                  const isUnplayed = stats.historicalPlayedCount === 0;
+
+                  return (
+                    <article
+                      key={p.id}
+                      className="rounded-2xl border border-slate-200 bg-white p-3.5 shadow-xs"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <h3 className="text-sm font-extrabold text-slate-900 break-all">{p.name}</h3>
+                          {isUnplayed && (
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                              未出賽
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold">
+                          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-slate-600">
+                            {p.gender === 'female' ? '女' : '男'} · {p.level || '中級'}
+                          </span>
+                          <span className={`rounded-md px-2 py-0.5 ${
+                            isAtt ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                          }`}>
+                            {isAtt ? '已報名出席' : '未報名'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-[1fr_auto] items-end gap-3 border-t border-slate-200/80 pt-2.5">
+                        <div className="min-w-0">
+                          <div className="text-[10px] font-bold tracking-wide text-slate-400">意願項目</div>
+                          {srv?.preferred_disciplines.length ? (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {srv.preferred_disciplines.map(discipline => (
+                                <span
+                                  key={discipline}
+                                  className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-700"
+                                >
+                                  {discipline}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="mt-1 text-xs font-medium text-slate-400">未填意願</div>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <div className="text-[10px] font-bold tracking-wide text-slate-400">歷史出賽</div>
+                          <div className={`mt-1 text-sm font-black ${isUnplayed ? 'text-amber-700' : 'text-slate-800'}`}>
+                            {stats.historicalPlayedCount} 場
+                          </div>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+
+              {/* Desktop: retain the dense comparison table. */}
+              <div className="hidden sm:block border border-slate-200 rounded-2xl overflow-hidden bg-white">
                 <table className="w-full text-sm text-left">
                   <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold text-xs">
                     <tr>
@@ -635,25 +724,7 @@ export const AdminMatchLineupModal: React.FC<AdminMatchLineupModalProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {[...eligibleProfiles]
-                      .sort((a, b) => {
-                        const statsA = getMemberMatchStats(a.id, event.id);
-                        const statsB = getMemberMatchStats(b.id, event.id);
-                        // 1. Unplayed / historical matches ascending
-                        if (statsA.historicalPlayedCount !== statsB.historicalPlayedCount) {
-                          return statsA.historicalPlayedCount - statsB.historicalPlayedCount;
-                        }
-                        // 2. Current assigned count ascending
-                        const assignedA = currentAssignedCounts[a.id] || 0;
-                        const assignedB = currentAssignedCounts[b.id] || 0;
-                        if (assignedA !== assignedB) return assignedA - assignedB;
-                        // 3. Attending first
-                        const isAttA = attendingUserIds.includes(a.id) ? 1 : 0;
-                        const isAttB = attendingUserIds.includes(b.id) ? 1 : 0;
-                        if (isAttA !== isAttB) return isAttB - isAttA;
-                        return a.name.localeCompare(b.name, 'zh-Hant');
-                      })
-                      .map((p) => {
+                    {statsProfiles.map((p) => {
                         const isAtt = attendingUserIds.includes(p.id);
                         const srv = surveyMap.get(p.id);
                         const stats = getMemberMatchStats(p.id, event.id);

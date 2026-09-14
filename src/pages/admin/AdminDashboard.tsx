@@ -1,6 +1,7 @@
 import React from 'react';
 import { AnnouncementBoard } from '../../components/common/AnnouncementBoard';
 import { QuickDrawModal } from '../../components/common/QuickDrawModal';
+import { AdminGameStatsModal } from '../../components/common/AdminGameStatsModal';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../../store/useAppStore';
 import { formatTimeRange, isEventPast, formatEventDateTimeCN, formatFullDateCN } from '../../utils/dateUtils';
@@ -20,13 +21,15 @@ import {
   Clock,
   MapPin,
   DollarSign,
-  Dices
+  Dices,
+  Gamepad2
 } from 'lucide-react';
 
 export const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { finances, events, attendance, feeCollections, feeRecords, profiles } = useAppStore();
   const [isQuickDrawOpen, setIsQuickDrawOpen] = React.useState(false);
+  const [isGameStatsOpen, setIsGameStatsOpen] = React.useState(false);
 
   // 1. Calculate Fund Ledger Balance
   const totalIncome = finances
@@ -93,6 +96,13 @@ export const AdminDashboard: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            onClick={() => setIsGameStatsOpen(true)}
+            className="flex items-center space-x-1.5 rounded-xl bg-slate-900 px-3.5 py-2 text-xs font-semibold text-white shadow-xs transition-colors hover:bg-slate-800 active:scale-98"
+          >
+            <Gamepad2 className="h-4 w-4 text-emerald-400" />
+            <span>遊戲戰績</span>
+          </button>
           <button
             onClick={() => setIsQuickDrawOpen(true)}
             className="flex items-center space-x-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 px-3.5 py-2 text-xs font-semibold text-white shadow-xs transition-all hover:brightness-105 active:scale-98"
@@ -380,6 +390,7 @@ export const AdminDashboard: React.FC = () => {
       </div>
 
       {isQuickDrawOpen && <QuickDrawModal profiles={profiles} onClose={() => setIsQuickDrawOpen(false)} />}
+      {isGameStatsOpen && <AdminGameStatsModal onClose={() => setIsGameStatsOpen(false)} />}
 
     </div>
   );

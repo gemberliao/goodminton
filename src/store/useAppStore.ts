@@ -14,7 +14,12 @@ import {
   MatchDiscipline,
   MatchSurveyResponse,
   MatchPointSlot,
-  MatchLineupConfig
+  MatchLineupConfig,
+  ShuttleGameResult,
+  ShuttleGameResultType,
+  CoinWallet,
+  ShopPurchase,
+  GameLoadout
 } from '../types';
 
 // Standard UUID Generator (RFC 4122 v4)
@@ -371,6 +376,16 @@ async function syncMatchLineupDelete(eventId: string): Promise<SyncResult> {
   }
 }
 
+async function syncGameResultInsert(result: ShuttleGameResult): Promise<SyncResult> {
+  if (!getSupabaseConfig().isConfigured) return { success: true };
+  try {
+    const { error } = await supabase.from('game_results').insert([result]);
+    return error ? reportSupabaseError('遊戲戰績寫入', error) : { success: true };
+  } catch (error: unknown) {
+    return reportSupabaseError('遊戲戰績寫入', error);
+  }
+}
+
 interface AppState {
   currentUser: Profile;
   profiles: Profile[];
@@ -382,6 +397,10 @@ interface AppState {
   matchSurveys: MatchSurveyResponse[];
   matchLineupSlots: MatchPointSlot[];
   matchLineupConfigs: Record<string, MatchLineupConfig>; // event_id -> config
+  gameResults: ShuttleGameResult[];
+  coinWallets: CoinWallet[];
+  shopPurchases: ShopPurchase[];
+  gameLoadouts: GameLoadout[];
   viewedEventIdsByUser: Record<string, string[]>;
   viewedFeeRecordIdsByUser: Record<string, string[]>;
   viewedAnnouncementUpdatedAtByUser: Record<string, string>;
@@ -417,6 +436,15 @@ interface AppState {
     currentEventSlotCount: number;
     survey?: MatchSurveyResponse;
   };
+
+  // Shuttle game results (只記錄完成的對戰)
+  recordGameResult: (
+    result: ShuttleGameResultType,
+    playerScore: number,
+    cpuScore: number
+  ) => Promise<SyncResult>;
+  buyShopItem: (itemId: string) => Promise<SyncResult>;
+  equipGameItem: (itemId: string) => Promise<SyncResult>;
   
   // Finances
   addFinance: (finance: Omit<FinanceLedger, 'id' | 'created_at'>) => Promise<SyncResult>;
@@ -464,6 +492,10 @@ const initialMatchSurveys: MatchSurveyResponse[] = [];
 
 const initialMatchLineupSlots: MatchPointSlot[] = [];
 const initialMatchLineupConfigs: Record<string, MatchLineupConfig> = {};
+const initialGameResults: ShuttleGameResult[] = [];
+const initialCoinWallets: CoinWallet[] = [];
+const initialShopPurchases: ShopPurchase[] = [];
+const initialGameLoadouts: GameLoadout[] = [];
 
 const initialFinances: FinanceLedger[] = [];
 const initialFeeCollections: FeeCollection[] = [];
@@ -482,6 +514,10 @@ export const useAppStore = create<AppState>()(
       matchSurveys: initialMatchSurveys,
       matchLineupSlots: initialMatchLineupSlots,
       matchLineupConfigs: initialMatchLineupConfigs,
+      gameResults: initialGameResults,
+      coinWallets: initialCoinWallets,
+      shopPurchases: initialShopPurchases,
+      gameLoadouts: initialGameLoadouts,
       viewedEventIdsByUser: {},
       viewedFeeRecordIdsByUser: {},
       viewedAnnouncementUpdatedAtByUser: {},
@@ -852,6 +888,71 @@ export const useAppStore = create<AppState>()(
           set({ matchLineupSlots: previousSlots, matchLineupConfigs: previousConfigs });
         }
         return sync;
+      },
+
+      recordGameResult: async (result, playerScore, cpuScore) => {
+        const userId = get().currentUser.id;
+        if (!userId) return { success: false, message: '找不到目前玩家。' };
+
+        const completedGame: ShuttleGameResult = {
+          id: generateUUID(),
+          user_id: userId,
+          result,
+          player_score: playerScore,
+          cpu_score: cpuScore,
+          played_at: new Date().toISOString()
+        };
+        const previousResults = get().gameResults;
+        set({ gameResults: [completedGame, ...previousResults] });
+        const sync = await syncGameResultInsert(completedGame);
+        if (!sync.success) set({ gameResults: previousResults });
+        else await get().fetchFromSupabase();
+        return sync;
+      },
+
+      buyShopItem: async (itemId) => {
+        if (!getSupabaseConfig().isConfigured) {
+          return { success: false, message: '商店尚未連線。' };
+        }
+        try {
+          const { error } = await supabase.rpc('goodminton_buy_shop_item', {
+            target_item_id: itemId
+          });
+          if (error) {
+            if (/INSUFFICIENT_COINS/i.test(error.message)) {
+              return { success: false, message: '金幣不足，再贏幾場就能購買。' };
+            }
+            if (/ITEM_ALREADY_OWNED|duplicate key/i.test(error.message)) {
+              return { success: false, message: '你已經擁有這件收藏品。' };
+            }
+            return reportSupabaseError('商店購買', error);
+          }
+          await get().fetchFromSupabase();
+          return { success: true };
+        } catch (error: unknown) {
+          return reportSupabaseError('商店購買', error);
+        }
+      },
+
+      equipGameItem: async (itemId) => {
+        if (!getSupabaseConfig().isConfigured) {
+          return { success: false, message: '裝備尚未連線。' };
+        }
+        try {
+          const { error } = await supabase.rpc('goodminton_equip_game_item', {
+            target_item_id: itemId
+          });
+          if (error) {
+            if (/ITEM_NOT_OWNED/i.test(error.message)) {
+              return { success: false, message: '請先購買這個樣式。' };
+            }
+            return reportSupabaseError('遊戲裝備切換', error);
+          }
+          await get().fetchFromSupabase();
+          return { success: true };
+        } catch (error: unknown) {
+          return reportSupabaseError('遊戲裝備切換', error);
+        }
       },
 
       getMemberMatchStats: (userId, targetEventId) => {
@@ -1374,7 +1475,11 @@ export const useAppStore = create<AppState>()(
             recordsResult,
             surveysResult,
             slotsResult,
-            configsResult
+            configsResult,
+            gameResultsResult,
+            coinWalletsResult,
+            shopPurchasesResult,
+            gameLoadoutsResult
           ] = await Promise.all([
             supabase.from('profiles').select('*'),
             supabase.from('events').select('*'),
@@ -1384,7 +1489,11 @@ export const useAppStore = create<AppState>()(
             supabase.from('fee_records').select('*'),
             supabase.from('match_surveys').select('*'),
             supabase.from('match_lineup_slots').select('*'),
-            supabase.from('match_lineup_configs').select('*')
+            supabase.from('match_lineup_configs').select('*'),
+            supabase.from('game_results').select('*').order('played_at', { ascending: false }),
+            supabase.from('coin_wallets').select('*'),
+            supabase.from('shop_purchases').select('*').order('purchased_at', { ascending: false }),
+            supabase.from('game_loadouts').select('*')
           ]);
 
           const remoteResults = [
@@ -1420,6 +1529,21 @@ export const useAppStore = create<AppState>()(
             },
             {}
           );
+          // Keep the rest of the app usable while an older database is waiting
+          // for the game_results migration. Once present, RLS returns every row
+          // to admins and only the current member's rows to members.
+          const remoteGameResults = gameResultsResult.error
+            ? []
+            : (gameResultsResult.data || []) as ShuttleGameResult[];
+          const remoteCoinWallets = coinWalletsResult.error
+            ? []
+            : (coinWalletsResult.data || []) as CoinWallet[];
+          const remoteShopPurchases = shopPurchasesResult.error
+            ? []
+            : (shopPurchasesResult.data || []) as ShopPurchase[];
+          const remoteGameLoadouts = gameLoadoutsResult.error
+            ? []
+            : (gameLoadoutsResult.data || []) as GameLoadout[];
 
           const currentProfiles = get().profiles;
           const mergedProfiles = (pData || []).map((remoteP: any) => {
@@ -1456,6 +1580,10 @@ export const useAppStore = create<AppState>()(
             matchSurveys: deduplicateById(remoteSurveys),
             matchLineupSlots: deduplicateById(remoteSlots),
             matchLineupConfigs: remoteConfigs,
+            gameResults: deduplicateById(remoteGameResults),
+            coinWallets: remoteCoinWallets,
+            shopPurchases: deduplicateById(remoteShopPurchases),
+            gameLoadouts: remoteGameLoadouts,
             currentUser: matchedCurrentUser
           });
 
@@ -1489,6 +1617,10 @@ export const useAppStore = create<AppState>()(
           state.feeRecords = deduplicateById(state.feeRecords || []);
           state.matchSurveys = deduplicateById(state.matchSurveys || []);
           state.matchLineupSlots = deduplicateById(state.matchLineupSlots || []);
+          state.gameResults = deduplicateById(state.gameResults || []);
+          state.coinWallets = state.coinWallets || [];
+          state.shopPurchases = deduplicateById(state.shopPurchases || []);
+          state.gameLoadouts = state.gameLoadouts || [];
         }
       },
       partialize: (state) => ({

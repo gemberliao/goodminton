@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { useAppStore } from '../../store/useAppStore';
-import { AttendanceStatus } from '../../types';
+import { AttendanceStatus, BadmintonEvent } from '../../types';
 import { formatEventDateTimeCN, formatTimeRange, isEventPast } from '../../utils/dateUtils';
+import { AdminMatchLineupModal } from '../../components/match/AdminMatchLineupModal';
 import { 
   UserCheck, 
   CheckCircle, 
@@ -105,6 +106,7 @@ export const AdminAttendance: React.FC = () => {
   
   // Remark editing modal state
   const [editingRemarkUser, setEditingRemarkUser] = useState<{ userId: string; name: string; remarks: string } | null>(null);
+  const [selectedMatchEvent, setSelectedMatchEvent] = useState<BadmintonEvent | null>(null);
 
   // Statistics for current selected event
   const currentEventStats = useMemo(() => {
@@ -351,8 +353,19 @@ export const AdminAttendance: React.FC = () => {
                 </div>
               </div>
 
-              {/* Event Metadata Tag Summary */}
+              {/* Event Metadata Tag Summary & Match Lineup Action */}
               {currentEvent && (
+                <div className="flex items-center justify-start gap-3 flex-wrap">
+                {currentEvent.event_type === '比賽' && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedMatchEvent(currentEvent)}
+                    className="inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl border border-slate-900 bg-slate-900 px-3.5 py-2 text-xs font-bold text-white shadow-xs transition-all hover:bg-slate-800 active:scale-95"
+                  >
+                    <Sparkles className="h-4 w-4 shrink-0" />
+                    <span>{isEventPast(currentEvent) ? '查看／編輯歷史排點' : '管理比賽排點'}</span>
+                  </button>
+                )}
                 <div className="flex items-center gap-2 flex-wrap text-xs text-slate-600 font-medium">
                   <span className="inline-flex items-center gap-1.5 py-1 text-slate-800 font-bold">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
@@ -368,6 +381,7 @@ export const AdminAttendance: React.FC = () => {
                       <span>{currentEvent.location} {currentEvent.court_number && `(${currentEvent.court_number})`}</span>
                     </div>
                   )}
+                </div>
                 </div>
               )}
             </div>
@@ -730,6 +744,14 @@ export const AdminAttendance: React.FC = () => {
             </p>
           </div>
         </div>
+      )}
+
+      {selectedMatchEvent && (
+        <AdminMatchLineupModal
+          isOpen={true}
+          onClose={() => setSelectedMatchEvent(null)}
+          event={selectedMatchEvent}
+        />
       )}
 
       {/* EDIT LEAVE REMARK MODAL */}
