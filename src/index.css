@@ -3,14 +3,69 @@
 /* Base Typography Enhancement for Optimal Readability */
 html {
   font-size: 16px;
+  min-height: 100%;
+  background: #f8fafc;
+  color-scheme: light;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 body {
+  min-width: 320px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: 0;
+  overflow-x: hidden;
+  overscroll-behavior-y: none;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
   color: #1e293b;
   line-height: 1.6;
+}
+
+#root,
+.app-shell {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.app-shell {
+  padding-top: env(safe-area-inset-top);
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+a {
+  touch-action: manipulation;
+}
+
+@media (max-width: 767px) {
+  .app-main {
+    padding-left: max(0.875rem, env(safe-area-inset-left));
+    padding-right: max(0.875rem, env(safe-area-inset-right));
+  }
+
+  .login-page {
+    padding-top: max(1rem, env(safe-area-inset-top));
+    padding-right: max(1rem, env(safe-area-inset-right));
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+    padding-left: max(1rem, env(safe-area-inset-left));
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  input,
+  select,
+  textarea,
+  .field-input {
+    font-size: 16px;
+  }
 }
 
 /* FullCalendar Modern & Easy-to-Read Light Theme */

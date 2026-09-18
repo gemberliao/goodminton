@@ -26,7 +26,7 @@ export const Layout: React.FC = () => {
   const showSidebar = isAdmin;
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-emerald-500 selection:text-white">
+    <div className="app-shell min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-emerald-500 selection:text-white">
       <Navbar 
         onToggleSidebar={showSidebar ? () => setSidebarOpen(!sidebarOpen) : undefined} 
         showSidebarToggle={showSidebar}
@@ -50,7 +50,7 @@ export const Layout: React.FC = () => {
           </>
         )}
 
-        <main className="flex-1 overflow-y-auto p-3.5 sm:p-6 lg:p-8 pb-28 md:pb-8">
+        <main className="app-main flex-1 overflow-y-auto p-3.5 sm:p-6 lg:p-8 pb-28 md:pb-8">
           <Outlet />
         </main>
       </div>

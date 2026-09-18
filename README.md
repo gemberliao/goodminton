@@ -20,6 +20,15 @@ View your app in AI Studio: https://ai.studio/apps/6c07d15e-9e6d-49d0-9c29-f8e8b
 4. Run the app:
    `npm run dev`
 
+## Install on a phone
+
+GOODMINTON is an installable Progressive Web App (PWA). Deploy the production build over HTTPS, then open it on the phone:
+
+- Android / Chrome: tap the in-app **安裝 App** button, or use the browser menu and choose **Install app**.
+- iPhone / Safari: tap **Share**, then **Add to Home Screen**.
+
+The installed app opens in a standalone window and keeps the latest loaded app shell available when the network drops. Supabase authentication and live data synchronization still require an internet connection.
+
 ## Supabase database
 
 - The login screen uses a team username and password. Usernames are mapped to an internal hashed Auth email; `profiles` never stores passwords or Auth emails.

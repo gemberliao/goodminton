@@ -5,6 +5,7 @@ import { useAnnouncementStore } from './store/useAnnouncementStore';
 import { getSupabaseConfig, supabase } from './lib/supabase';
 import { Layout } from './components/layout/Layout';
 import { AuthSessionProvider, useAuthSession } from './auth/AuthSessionProvider';
+import { PwaInstallPrompt } from './components/common/PwaInstallPrompt';
 
 const Login = lazy(() => import('./pages/auth/Login').then((module) => ({ default: module.Login })));
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard').then((module) => ({ default: module.AdminDashboard })));
@@ -159,6 +160,7 @@ export default function App() {
   return (
     <AuthSessionProvider>
       <RealtimeDataSync />
+      <PwaInstallPrompt />
       <HashRouter>
         <Suspense fallback={<PageLoading />}>
           <Routes>
