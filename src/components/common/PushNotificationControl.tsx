@@ -164,7 +164,7 @@ export const PushNotificationControl: React.FC<Props> = ({ userId }) => {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 z-[80] mt-2 max-h-[min(38rem,calc(100dvh-5.5rem))] w-[min(22rem,calc(100vw-1.5rem))] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 text-slate-800 shadow-2xl">
+        <div className="fixed left-3 right-3 top-[4.5rem] z-[80] max-h-[calc(100dvh-5.25rem)] w-auto overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 text-slate-800 shadow-2xl sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:max-h-[min(38rem,calc(100dvh-5.5rem))] sm:w-[min(22rem,calc(100vw-1.5rem))]">
           <div className="flex items-start gap-3">
             <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${state.subscribed ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
               {state.subscribed ? <Check className="h-5 w-5" /> : <Bell className="h-5 w-5" />}
