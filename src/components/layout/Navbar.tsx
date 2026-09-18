@@ -3,7 +3,9 @@ import { useNavigate, useLocation, NavLink } from 'react-router-dom';
 import { useAppStore } from '../../store/useAppStore';
 import { isAnnouncementUnread, useAnnouncementStore } from '../../store/useAnnouncementStore';
 import { ShuttleSmashGameModal } from '../common/ShuttleSmashGameModal';
+import { PushNotificationControl } from '../common/PushNotificationControl';
 import { supabase } from '../../lib/supabase';
+import { disablePushNotifications } from '../../lib/pushNotifications';
 import { 
   Shield, 
   User as UserIcon, 
@@ -92,6 +94,7 @@ export const Navbar: React.FC<Props> = ({ onToggleSidebar, showSidebarToggle = t
   
   const handleLogout = async () => {
     setIsUserMenuOpen(false);
+    await disablePushNotifications(currentUser.id).catch(() => undefined);
     await supabase.auth.signOut();
     navigate('/login', { replace: true });
   };
@@ -162,6 +165,7 @@ export const Navbar: React.FC<Props> = ({ onToggleSidebar, showSidebarToggle = t
 
             {/* Right Controls */}
             <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
+              <PushNotificationControl userId={currentUser.id} />
               <button
                 type="button"
                 onClick={() => setIsGameOpen(true)}

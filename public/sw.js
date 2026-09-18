@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'goodminton-shell-';
-const CACHE_NAME = `${CACHE_PREFIX}v1`;
+const CACHE_NAME = `${CACHE_PREFIX}v2`;
 const APP_SHELL = [
   './',
   './manifest.webmanifest',
@@ -60,6 +60,56 @@ self.addEventListener('fetch', (event) => {
       });
 
       return cached || networkRequest;
+    })
+  );
+});
+
+self.addEventListener('push', (event) => {
+  let payload = {};
+  try {
+    payload = event.data?.json() || {};
+  } catch {
+    payload = { title: 'GOODMINTON', body: event.data?.text() || '你有一則新的球隊通知。' };
+  }
+
+  const title = payload.title || 'GOODMINTON';
+  const iconUrl = new URL('./icon-192.png', self.registration.scope).href;
+  const badgeUrl = new URL('./icon-maskable-512.png', self.registration.scope).href;
+  const unreadCount = Number(payload.unreadCount || 1);
+
+  event.waitUntil(Promise.all([
+    self.registration.showNotification(title, {
+      body: payload.body || '',
+      icon: iconUrl,
+      badge: badgeUrl,
+      tag: payload.tag || 'goodminton-notification',
+      renotify: true,
+      timestamp: payload.timestamp || Date.now(),
+      data: {
+        notificationId: payload.notificationId,
+        url: payload.url || '#/member/dashboard'
+      }
+    }),
+    self.navigator.setAppBadge ? self.navigator.setAppBadge(unreadCount) : Promise.resolve()
+  ]));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const notificationId = event.notification.data?.notificationId;
+  const route = event.notification.data?.url || '#/member/dashboard';
+  const targetUrl = new URL('./', self.registration.scope);
+  if (notificationId) targetUrl.searchParams.set('notification', notificationId);
+  targetUrl.hash = route.startsWith('#') ? route.slice(1) : route;
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (clients) => {
+      const existing = clients.find((client) => new URL(client.url).origin === targetUrl.origin);
+      if (existing) {
+        await existing.navigate(targetUrl.href);
+        return existing.focus();
+      }
+      return self.clients.openWindow(targetUrl.href);
     })
   );
 });

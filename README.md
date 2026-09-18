@@ -29,6 +29,31 @@ GOODMINTON is an installable Progressive Web App (PWA). Deploy the production bu
 
 The installed app opens in a standalone window and keeps the latest loaded app shell available when the network drops. Supabase authentication and live data synchronization still require an internet connection.
 
+## Web Push notifications
+
+GOODMINTON includes opt-in Web Push for new or changed events, next-day reminders, membership applications, announcements, bills, and published match lineup/result updates. The bell in the top navigation controls each device's subscription and can send a test notification. Android uses unread notifications for its launcher badge; platforms with the Badging API receive the unread count directly.
+
+Complete the following production setup once:
+
+1. Run `supabase_push_notifications.sql` in the Supabase SQL Editor after the main schema and announcement migration.
+2. Generate one VAPID key pair with `npm run generate:vapid`. Keep the private key secret.
+3. Add the public key to the GitHub Actions repository secret `VITE_WEB_PUSH_PUBLIC_KEY`.
+4. Configure and deploy the Edge Function:
+
+   ```sh
+   supabase secrets set VAPID_PUBLIC_KEY="..." VAPID_PRIVATE_KEY="..." VAPID_SUBJECT="mailto:your-address@example.com"
+   supabase functions deploy send-push-notification
+   ```
+
+5. In Supabase **Database Webhooks**, create an `INSERT` webhook for `public.push_notifications` targeting the `send-push-notification` Edge Function. Add the service-role authorization header using the Dashboard's service-key option.
+6. In Supabase **Cron**, schedule this SQL at `0 11 * * *` (19:00 Asia/Taipei) for next-day reminders:
+
+   ```sql
+   select public.goodminton_enqueue_event_reminders();
+   ```
+
+The service-role key and VAPID private key must only exist in Supabase. Never add either value to Vite variables, GitHub Pages output, or committed files.
+
 ## Supabase database
 
 - The login screen uses a team username and password. Usernames are mapped to an internal hashed Auth email; `profiles` never stores passwords or Auth emails.
