@@ -23,8 +23,46 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+const updateAppBadge = (unreadCount) => {
+  if (unreadCount > 0 && self.navigator.setAppBadge) {
+    return self.navigator.setAppBadge(unreadCount).catch(() => undefined);
+  }
+  if (unreadCount <= 0 && self.navigator.clearAppBadge) {
+    return self.navigator.clearAppBadge().catch(() => undefined);
+  }
+  return Promise.resolve();
+};
+
+const closeSystemNotifications = async (notificationId) => {
+  const notifications = await self.registration.getNotifications();
+  notifications
+    .filter((notification) => !notificationId || notification.data?.notificationId === notificationId)
+    .forEach((notification) => notification.close());
+};
+
 self.addEventListener('message', (event) => {
-  if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
+  if (event.data?.type === 'SKIP_WAITING') {
+    event.waitUntil(self.skipWaiting());
+    return;
+  }
+
+  if (event.data?.type === 'GOODMINTON_NOTIFICATION_READ') {
+    event.waitUntil(closeSystemNotifications(event.data.notificationId));
+    return;
+  }
+
+  if (event.data?.type === 'GOODMINTON_NOTIFICATIONS_READ_ALL') {
+    event.waitUntil(Promise.all([closeSystemNotifications(), updateAppBadge(0)]));
+    return;
+  }
+
+  if (event.data?.type === 'GOODMINTON_BADGE_SYNC') {
+    const unreadCount = Math.max(0, Number(event.data.unreadCount) || 0);
+    event.waitUntil(Promise.all([
+      updateAppBadge(unreadCount),
+      unreadCount === 0 ? closeSystemNotifications() : Promise.resolve()
+    ]));
+  }
 });
 
 self.addEventListener('fetch', (event) => {
@@ -90,7 +128,7 @@ self.addEventListener('push', (event) => {
         url: payload.url || '#/member/dashboard'
       }
     }),
-    self.navigator.setAppBadge ? self.navigator.setAppBadge(unreadCount) : Promise.resolve()
+    updateAppBadge(unreadCount)
   ]));
 });
 

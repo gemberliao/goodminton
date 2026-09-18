@@ -22,6 +22,11 @@ type NavigatorWithBadging = Navigator & {
   clearAppBadge?: () => Promise<void>;
 };
 
+type GoodmintonServiceWorkerMessage =
+  | { type: 'GOODMINTON_BADGE_SYNC'; unreadCount: number }
+  | { type: 'GOODMINTON_NOTIFICATION_READ'; notificationId: string }
+  | { type: 'GOODMINTON_NOTIFICATIONS_READ_ALL' };
+
 const getPublicKey = () => (import.meta.env.VITE_WEB_PUSH_PUBLIC_KEY || '').trim();
 
 const isSupported = () =>
@@ -45,6 +50,23 @@ const getRegistration = async () => {
     navigator.serviceWorker.ready,
     new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 2000)),
   ]);
+};
+
+const postServiceWorkerMessage = async (message: GoodmintonServiceWorkerMessage): Promise<void> => {
+  if (!('serviceWorker' in navigator)) return;
+  const registration = await getRegistration();
+  const worker = registration?.active || navigator.serviceWorker.controller;
+  worker?.postMessage(message);
+};
+
+const syncAppBadge = async (unreadCount: number): Promise<void> => {
+  const badgingNavigator = navigator as NavigatorWithBadging;
+  if (unreadCount > 0) {
+    await badgingNavigator.setAppBadge?.(unreadCount).catch(() => undefined);
+  } else {
+    await badgingNavigator.clearAppBadge?.().catch(() => undefined);
+  }
+  await postServiceWorkerMessage({ type: 'GOODMINTON_BADGE_SYNC', unreadCount });
 };
 
 export const getPushNotificationState = async (): Promise<PushNotificationState> => {
@@ -132,9 +154,7 @@ export const refreshUnreadPushCount = async (userId: string): Promise<number> =>
     .is('read_at', null);
   if (error) return 0;
   const unreadCount = count || 0;
-  const badgingNavigator = navigator as NavigatorWithBadging;
-  if (unreadCount > 0) await badgingNavigator.setAppBadge?.(unreadCount).catch(() => undefined);
-  else await badgingNavigator.clearAppBadge?.().catch(() => undefined);
+  await syncAppBadge(unreadCount);
   return unreadCount;
 };
 
@@ -150,18 +170,24 @@ export const fetchRecentPushNotifications = async (userId: string): Promise<Push
 };
 
 export const markPushNotificationRead = async (userId: string, notificationId: string): Promise<void> => {
-  await supabase.from('push_notifications')
+  const { error } = await supabase.from('push_notifications')
     .update({ read_at: new Date().toISOString() })
     .eq('id', notificationId)
     .eq('user_id', userId);
+  if (!error) {
+    await postServiceWorkerMessage({ type: 'GOODMINTON_NOTIFICATION_READ', notificationId });
+  }
 };
 
 export const markAllPushNotificationsRead = async (userId: string): Promise<void> => {
-  await supabase.from('push_notifications')
+  const { error } = await supabase.from('push_notifications')
     .update({ read_at: new Date().toISOString() })
     .eq('user_id', userId)
     .is('read_at', null);
-  await clearAppBadge();
+  if (!error) {
+    await postServiceWorkerMessage({ type: 'GOODMINTON_NOTIFICATIONS_READ_ALL' });
+    await clearAppBadge();
+  }
 };
 
 export const markOpenedPushNotification = async (userId: string): Promise<void> => {
@@ -177,4 +203,5 @@ export const markOpenedPushNotification = async (userId: string): Promise<void> 
 
 export const clearAppBadge = async (): Promise<void> => {
   await (navigator as NavigatorWithBadging).clearAppBadge?.().catch(() => undefined);
+  await postServiceWorkerMessage({ type: 'GOODMINTON_BADGE_SYNC', unreadCount: 0 });
 };
