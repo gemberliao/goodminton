@@ -103,7 +103,7 @@ export const Navbar: React.FC<Props> = ({ onToggleSidebar, showSidebarToggle = t
     <>
       <header className="sticky top-0 z-40 bg-white border-b border-slate-200 text-slate-800 shadow-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+          <div className="flex items-center justify-between gap-3 h-16">
             
             {/* Brand Logo & Mobile Toggle */}
             <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
@@ -120,7 +120,7 @@ export const Navbar: React.FC<Props> = ({ onToggleSidebar, showSidebarToggle = t
                 <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-emerald-600 flex items-center justify-center text-white font-bold shadow-xs shrink-0">
                   <span className="text-sm sm:text-base font-black">G</span>
                 </div>
-                <span className="text-base sm:text-lg font-bold tracking-tight text-slate-900 hidden min-[380px]:inline whitespace-nowrap">
+                <span className="text-sm sm:text-lg font-bold tracking-tight text-slate-900 hidden min-[380px]:inline whitespace-nowrap">
                   GOODMINTON
                 </span>
               </div>
