@@ -62,7 +62,14 @@ const postServiceWorkerMessage = async (message: GoodmintonServiceWorkerMessage)
 const syncAppBadge = async (unreadCount: number): Promise<void> => {
   const badgingNavigator = navigator as NavigatorWithBadging;
   if (unreadCount > 0) {
-    await badgingNavigator.setAppBadge?.(unreadCount).catch(() => undefined);
+    if (badgingNavigator.setAppBadge) {
+      try {
+        await badgingNavigator.setAppBadge(unreadCount);
+      } catch {
+        // Keep a dot fallback on platforms that expose Badging without numbers.
+        await badgingNavigator.setAppBadge().catch(() => undefined);
+      }
+    }
   } else {
     await badgingNavigator.clearAppBadge?.().catch(() => undefined);
   }

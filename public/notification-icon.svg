@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" role="img" aria-label="Goodminton notification icon">
+  <g fill="none" stroke="#059669" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M43 27h106l-18 80H61L43 27Z" stroke-width="11"/>
+    <path d="m55 41 76 54M137 41 61 95M96 34v67" stroke-width="12"/>
+    <path d="M62 108h68l-12 34H74l-12-34Z" fill="#6ee7b7" stroke-width="9"/>
+  </g>
+  <circle cx="96" cy="159" r="25" fill="#059669"/>
+</svg>

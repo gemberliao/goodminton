@@ -66,7 +66,17 @@ export const PushNotificationControl: React.FC<Props> = ({ userId }) => {
       }))
       .subscribe();
 
-    return () => { void supabase.removeChannel(channel); };
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void refresh();
+    };
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    window.addEventListener('focus', refreshWhenVisible);
+
+    return () => {
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+      window.removeEventListener('focus', refreshWhenVisible);
+      void supabase.removeChannel(channel);
+    };
   }, [refresh, userId]);
 
   useEffect(() => {

@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'goodminton-shell-';
-const CACHE_NAME = `${CACHE_PREFIX}v2`;
+const CACHE_NAME = `${CACHE_PREFIX}v3`;
 const APP_SHELL = [
   './',
   './manifest.webmanifest',
@@ -7,6 +7,8 @@ const APP_SHELL = [
   './icon-192.png',
   './icon-512.png',
   './icon-maskable-512.png',
+  './notification-icon-192.png',
+  './notification-badge-96.png',
   './apple-touch-icon.png'
 ];
 
@@ -23,14 +25,19 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-const updateAppBadge = (unreadCount) => {
+const updateAppBadge = async (unreadCount) => {
   if (unreadCount > 0 && self.navigator.setAppBadge) {
-    return self.navigator.setAppBadge(unreadCount).catch(() => undefined);
+    try {
+      await self.navigator.setAppBadge(unreadCount);
+    } catch {
+      // Some platforms expose Badging but only render a generic dot.
+      await self.navigator.setAppBadge().catch(() => undefined);
+    }
+    return;
   }
   if (unreadCount <= 0 && self.navigator.clearAppBadge) {
-    return self.navigator.clearAppBadge().catch(() => undefined);
+    await self.navigator.clearAppBadge().catch(() => undefined);
   }
-  return Promise.resolve();
 };
 
 const closeSystemNotifications = async (notificationId) => {
@@ -111,8 +118,11 @@ self.addEventListener('push', (event) => {
   }
 
   const title = payload.title || 'GOODMINTON';
-  const iconUrl = new URL('./icon-192.png', self.registration.scope).href;
-  const badgeUrl = new URL('./icon-maskable-512.png', self.registration.scope).href;
+  // Notification artwork is intentionally separate from the install icons:
+  // `icon` may be rendered in color in the expanded notification, while
+  // Android masks `badge` into the small monochrome status-bar glyph.
+  const iconUrl = new URL('./notification-icon-192.png', self.registration.scope).href;
+  const badgeUrl = new URL('./notification-badge-96.png', self.registration.scope).href;
   const unreadCount = Number(payload.unreadCount || 1);
 
   event.waitUntil(Promise.all([
