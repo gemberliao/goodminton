@@ -388,23 +388,29 @@ export const AdminAttendance: React.FC = () => {
 
             {/* Quick Metrics & Attendance Snapshot as Filter Buttons */}
             {currentEvent && (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-3 border-t border-slate-100">
+              <div className="grid grid-cols-2 gap-2.5 pt-3 sm:grid-cols-4 border-t border-slate-100">
                 {/* All Members */}
                 <button
                   type="button"
                   onClick={() => setStatusFilter('all')}
                   aria-pressed={statusFilter === 'all'}
-                  className={`p-3.5 rounded-2xl text-center transition-colors cursor-pointer ${
+                  className={`group relative overflow-hidden rounded-2xl border p-3.5 text-left shadow-[0_8px_18px_-14px_rgba(37,99,235,0.32)] transition-all duration-200 focus:outline-none ${
                     statusFilter === 'all'
-                      ? 'bg-slate-100 text-slate-900'
-                      : 'bg-slate-50/70 hover:bg-slate-100 text-slate-600'
+                      ? 'border-blue-200 bg-gradient-to-br from-white via-blue-50/45 to-blue-100/55 ring-2 ring-blue-200/60'
+                      : 'border-blue-100 bg-gradient-to-br from-white via-blue-50/30 to-blue-100/40 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-[0_14px_30px_-16px_rgba(37,99,235,0.4)]'
                   }`}
                 >
-                  <div className="text-[11px] font-bold text-slate-500">
-                    全部應到隊員
+                  <span className="pointer-events-none absolute -bottom-10 -right-8 h-24 w-24 rounded-full bg-blue-100/45" aria-hidden="true" />
+                  <div className="relative flex items-center gap-2">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-500">
+                      <Users className="h-4 w-4" />
+                    </span>
+                    <span className="h-5 w-px bg-blue-200" aria-hidden="true" />
+                    <span className="text-[11px] font-black text-slate-800">全部應到隊員</span>
                   </div>
-                  <div className="text-xl font-black text-slate-900 tracking-tight mt-0.5">
-                    {currentEventStats.total} <span className="text-xs font-normal text-slate-500">人</span>
+                  <div className="relative mt-2 flex items-end gap-1">
+                    <span className="text-2xl font-black leading-none tracking-tight text-slate-900">{currentEventStats.total}</span>
+                    <span className="pb-0.5 text-xs font-medium leading-none text-slate-500">人</span>
                   </div>
                 </button>
 
@@ -413,21 +419,23 @@ export const AdminAttendance: React.FC = () => {
                   type="button"
                   onClick={() => setStatusFilter('attending')}
                   aria-pressed={statusFilter === 'attending'}
-                  className={`p-3.5 rounded-2xl text-center transition-colors cursor-pointer ${
+                  className={`group relative overflow-hidden rounded-2xl border p-3.5 text-left shadow-[0_8px_18px_-14px_rgba(5,150,105,0.3)] transition-all duration-200 focus:outline-none ${
                     statusFilter === 'attending'
-                      ? 'bg-emerald-100/80 text-slate-900'
-                      : 'bg-emerald-50/60 hover:bg-emerald-100/70 text-slate-600'
+                      ? 'border-emerald-200 bg-gradient-to-br from-white via-emerald-50/45 to-emerald-100/55 ring-2 ring-emerald-200/60'
+                      : 'border-emerald-100 bg-gradient-to-br from-white via-emerald-50/30 to-emerald-100/40 hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-[0_14px_30px_-16px_rgba(5,150,105,0.4)]'
                   }`}
                 >
-                  <div className="text-[11px] font-bold text-emerald-700/80 flex items-center justify-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>已報名出席</span>
-                  </div>
-                  <div className="text-xl font-black text-emerald-700/80 tracking-tight mt-0.5">
-                    {currentEventStats.attending} 
-                    <span className="text-xs font-normal text-emerald-700/70">
-                      {currentEvent.max_participants ? ` / ${currentEvent.max_participants}` : ''} 人
+                  <span className="pointer-events-none absolute -bottom-10 -right-8 h-24 w-24 rounded-full bg-emerald-100/45" aria-hidden="true" />
+                  <div className="relative flex items-center gap-2">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600">
+                      <CheckCircle2 className="h-4 w-4" />
                     </span>
+                    <span className="h-5 w-px bg-emerald-200" aria-hidden="true" />
+                    <span className="text-[11px] font-black text-emerald-900">已報名出席</span>
+                  </div>
+                  <div className="relative mt-2 flex items-end gap-1">
+                    <span className="text-2xl font-black leading-none tracking-tight text-emerald-700">{currentEventStats.attending}</span>
+                    <span className="pb-0.5 text-xs font-medium leading-none text-emerald-800/60">人</span>
                   </div>
                 </button>
 
@@ -436,18 +444,23 @@ export const AdminAttendance: React.FC = () => {
                   type="button"
                   onClick={() => setStatusFilter('absent')}
                   aria-pressed={statusFilter === 'absent'}
-                  className={`p-3.5 rounded-2xl text-center transition-colors cursor-pointer ${
+                  className={`group relative overflow-hidden rounded-2xl border p-3.5 text-left shadow-[0_8px_18px_-14px_rgba(225,29,72,0.28)] transition-all duration-200 focus:outline-none ${
                     statusFilter === 'absent'
-                      ? 'bg-rose-100/80 text-slate-900'
-                      : 'bg-rose-50/60 hover:bg-rose-100/70 text-slate-600'
+                      ? 'border-rose-200 bg-gradient-to-br from-white via-rose-50/45 to-pink-100/55 ring-2 ring-rose-200/60'
+                      : 'border-rose-100 bg-gradient-to-br from-white via-rose-50/30 to-pink-100/40 hover:-translate-y-0.5 hover:border-rose-200 hover:shadow-[0_14px_30px_-16px_rgba(225,29,72,0.38)]'
                   }`}
                 >
-                  <div className="text-[11px] font-bold text-rose-700/80 flex items-center justify-center gap-1">
-                    <XCircle className="w-3.5 h-3.5 text-rose-600" />
-                    <span>已請假</span>
+                  <span className="pointer-events-none absolute -bottom-10 -right-8 h-24 w-24 rounded-full bg-rose-100/45" aria-hidden="true" />
+                  <div className="relative flex items-center gap-2">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-rose-100 text-rose-500">
+                      <XCircle className="h-4 w-4" />
+                    </span>
+                    <span className="h-5 w-px bg-rose-200" aria-hidden="true" />
+                    <span className="text-[11px] font-black text-rose-900">已請假</span>
                   </div>
-                  <div className="text-xl font-black text-rose-700/80 tracking-tight mt-0.5">
-                    {currentEventStats.absent} <span className="text-xs font-normal text-rose-700/70">人</span>
+                  <div className="relative mt-2 flex items-end gap-1">
+                    <span className="text-2xl font-black leading-none tracking-tight text-rose-700">{currentEventStats.absent}</span>
+                    <span className="pb-0.5 text-xs font-medium leading-none text-rose-800/60">人</span>
                   </div>
                 </button>
 
@@ -456,18 +469,23 @@ export const AdminAttendance: React.FC = () => {
                   type="button"
                   onClick={() => setStatusFilter('pending')}
                   aria-pressed={statusFilter === 'pending'}
-                  className={`p-3.5 rounded-2xl text-center transition-colors cursor-pointer ${
+                  className={`group relative overflow-hidden rounded-2xl border p-3.5 text-left shadow-[0_8px_18px_-14px_rgba(79,70,229,0.28)] transition-all duration-200 focus:outline-none ${
                     statusFilter === 'pending'
-                      ? 'bg-slate-200/80 text-slate-900'
-                      : 'bg-slate-50/70 hover:bg-slate-100 text-slate-600'
+                      ? 'border-indigo-200 bg-gradient-to-br from-white via-indigo-50/45 to-violet-100/55 ring-2 ring-indigo-200/60'
+                      : 'border-indigo-100 bg-gradient-to-br from-white via-indigo-50/30 to-violet-100/40 hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-[0_14px_30px_-16px_rgba(79,70,229,0.38)]'
                   }`}
                 >
-                  <div className="text-[11px] font-bold text-slate-600 flex items-center justify-center gap-1">
-                    <HelpCircle className="w-3.5 h-3.5 text-slate-400" />
-                    <span>未回覆 / 未點名</span>
+                  <span className="pointer-events-none absolute -bottom-10 -right-8 h-24 w-24 rounded-full bg-indigo-100/45" aria-hidden="true" />
+                  <div className="relative flex items-center gap-2">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-500">
+                      <HelpCircle className="h-4 w-4" />
+                    </span>
+                    <span className="h-5 w-px bg-indigo-200" aria-hidden="true" />
+                    <span className="text-[11px] font-black text-indigo-950">未回覆 / 未點名</span>
                   </div>
-                  <div className="text-xl font-black text-slate-700 tracking-tight mt-0.5">
-                    {currentEventStats.pending} <span className="text-xs font-normal text-slate-500">人</span>
+                  <div className="relative mt-2 flex items-end gap-1">
+                    <span className="text-2xl font-black leading-none tracking-tight text-indigo-900">{currentEventStats.pending}</span>
+                    <span className="pb-0.5 text-xs font-medium leading-none text-indigo-900/55">人</span>
                   </div>
                 </button>
               </div>

@@ -125,21 +125,37 @@ self.addEventListener('push', (event) => {
   const badgeUrl = new URL('./notification-badge-96.png', self.registration.scope).href;
   const unreadCount = Number(payload.unreadCount || 1);
 
-  event.waitUntil(Promise.all([
-    self.registration.showNotification(title, {
-      body: payload.body || '',
-      icon: iconUrl,
-      badge: badgeUrl,
-      tag: payload.tag || 'goodminton-notification',
-      renotify: true,
-      timestamp: payload.timestamp || Date.now(),
-      data: {
-        notificationId: payload.notificationId,
-        url: payload.url || '#/member/dashboard'
-      }
-    }),
-    updateAppBadge(unreadCount)
-  ]));
+  event.waitUntil((async () => {
+    const windowClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const visibleClients = windowClients.filter((client) => client.visibilityState === 'visible');
+
+    if (visibleClients.length > 0) {
+      visibleClients.forEach((client) => client.postMessage({
+        type: 'GOODMINTON_PUSH_RECEIVED_VISIBLE'
+      }));
+      await Promise.all([
+        closeSystemNotifications(payload.notificationId),
+        updateAppBadge(0)
+      ]);
+      return;
+    }
+
+    await Promise.all([
+      self.registration.showNotification(title, {
+        body: payload.body || '',
+        icon: iconUrl,
+        badge: badgeUrl,
+        tag: payload.tag || 'goodminton-notification',
+        renotify: true,
+        timestamp: payload.timestamp || Date.now(),
+        data: {
+          notificationId: payload.notificationId,
+          url: payload.url || '#/member/dashboard'
+        }
+      }),
+      updateAppBadge(unreadCount)
+    ]);
+  })());
 });
 
 self.addEventListener('notificationclick', (event) => {

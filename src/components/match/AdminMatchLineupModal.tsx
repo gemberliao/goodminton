@@ -36,6 +36,33 @@ const POINT_DEFS: { index: number; name: string; discipline: MatchDiscipline; co
   { index: 5, name: '第 5 點 混雙 (XD)', discipline: '混雙', count: 2, desc: '混合雙打 (2人 - 建議男女搭檔)' },
 ];
 
+const buildLineupShareText = (
+  event: BadmintonEvent,
+  slots: MatchPointSlot[],
+  profiles: Profile[]
+): string => {
+  const [yearText, monthText, dayText] = event.event_date.split('-');
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const weekdayNames = ['日', '一', '二', '三', '四', '五', '六'];
+  const weekday = Number.isFinite(year) && Number.isFinite(month) && Number.isFinite(day)
+    ? weekdayNames[new Date(year, month - 1, day).getDay()]
+    : '';
+  const dateLabel = weekday ? `${month}/${day}（${weekday}）` : event.event_date;
+  const profileNames = new Map(profiles.map((profile) => [profile.id, profile.name]));
+
+  const lineupLines = POINT_DEFS.map((point) => {
+    const slot = slots.find((item) => item.discipline === point.discipline);
+    const playerNames = (slot?.player_ids || [])
+      .map((playerId) => profileNames.get(playerId))
+      .filter((name): name is string => Boolean(name));
+    return `${point.discipline}- ${playerNames.join(' ')}`;
+  });
+
+  return [`${dateLabel}${event.title.trim()}`, '', ...lineupLines].join('\n');
+};
+
 export const AdminMatchLineupModal: React.FC<AdminMatchLineupModalProps> = ({
   isOpen,
   onClose,
@@ -57,6 +84,8 @@ export const AdminMatchLineupModal: React.FC<AdminMatchLineupModalProps> = ({
   const [notes, setNotes] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'lineup' | 'surveys' | 'stats'>('lineup');
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+  const [isSharePreviewOpen, setIsSharePreviewOpen] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
   const isPast = isEventPast(event);
 
   // Initialize slots
@@ -86,6 +115,8 @@ export const AdminMatchLineupModal: React.FC<AdminMatchLineupModalProps> = ({
         setNotes('請全體隊員提早 20 分鐘抵達熱身！');
       }
       setSaveSuccessMsg(null);
+      setIsSharePreviewOpen(false);
+      setCopyStatus('idle');
     }
   }, [isOpen, event.id]);
 
@@ -229,9 +260,34 @@ export const AdminMatchLineupModal: React.FC<AdminMatchLineupModalProps> = ({
     const result = await saveMatchLineup(event.id, slots, publishState, notes);
     if (!result.success) return;
     setSaveSuccessMsg(publishState ? '出賽排點已發布！隊員可即時在前台查看。' : '出賽排點草稿已儲存！');
+    setCopyStatus('idle');
+    setIsSharePreviewOpen(true);
     setTimeout(() => {
       setSaveSuccessMsg(null);
     }, 2500);
+  };
+
+  const lineupShareText = buildLineupShareText(event, slots, profiles);
+
+  const handleCopyLineupText = async () => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(lineupShareText);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = lineupShareText;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        const copied = document.execCommand('copy');
+        textarea.remove();
+        if (!copied) throw new Error('Clipboard copy failed');
+      }
+      setCopyStatus('copied');
+    } catch {
+      setCopyStatus('failed');
+    }
   };
 
   return (
@@ -823,6 +879,64 @@ export const AdminMatchLineupModal: React.FC<AdminMatchLineupModalProps> = ({
         </div>
 
       </div>
+
+      {isSharePreviewOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 text-emerald-700">
+                  <Share2 className="h-5 w-5" />
+                  <h3 className="text-base font-black text-slate-900">群組貼文格式</h3>
+                </div>
+                <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                  名單已儲存，可直接複製後貼到 LINE 群組。
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSharePreviewOpen(false)}
+                className="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                aria-label="關閉群組格式預覽"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <textarea
+              readOnly
+              value={lineupShareText}
+              onFocus={(e) => e.currentTarget.select()}
+              rows={8}
+              aria-label="群組貼文文字"
+              className="w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 p-4 font-mono text-sm leading-7 text-slate-800 outline-none focus:border-emerald-400 focus:bg-white"
+            />
+
+            {copyStatus === 'failed' && (
+              <p className="mt-2 text-xs font-semibold text-rose-600">
+                無法自動複製，請長按上方文字後選擇複製。
+              </p>
+            )}
+
+            <div className="mt-4 flex gap-2.5">
+              <button
+                type="button"
+                onClick={() => setIsSharePreviewOpen(false)}
+                className="flex-1 rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50"
+              >
+                稍後再複製
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleCopyLineupText()}
+                className="flex-[1.4] rounded-xl bg-emerald-600 px-4 py-3 text-sm font-black text-white shadow-sm transition-all hover:bg-emerald-700 active:scale-95"
+              >
+                {copyStatus === 'copied' ? '已複製，可貼到群組' : '複製群組格式'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -46,9 +46,14 @@ export const PushNotificationControl: React.FC<Props> = ({ userId }) => {
     setNotifications(recentNotifications);
   }, [userId]);
 
+  const markVisibleNotificationsRead = useCallback(async () => {
+    if (document.visibilityState !== 'visible') return;
+    await markAllPushNotificationsRead(userId);
+    await refresh();
+  }, [refresh, userId]);
+
   useEffect(() => {
-    void refresh();
-    void markOpenedPushNotification(userId);
+    void markOpenedPushNotification(userId).then(markVisibleNotificationsRead);
 
     const channel = supabase
       .channel(`goodminton-push-notifications-${userId}`)
@@ -57,27 +62,40 @@ export const PushNotificationControl: React.FC<Props> = ({ userId }) => {
         schema: 'public',
         table: 'push_notifications',
         filter: `user_id=eq.${userId}`,
-      }, () => void Promise.all([
-        refreshUnreadPushCount(userId),
-        fetchRecentPushNotifications(userId),
-      ]).then(([count, recent]) => {
-        setUnreadCount(count);
-        setNotifications(recent);
-      }))
+      }, () => {
+        if (document.visibilityState === 'visible') {
+          void markVisibleNotificationsRead();
+          return;
+        }
+        void Promise.all([
+          refreshUnreadPushCount(userId),
+          fetchRecentPushNotifications(userId),
+        ]).then(([count, recent]) => {
+          setUnreadCount(count);
+          setNotifications(recent);
+        });
+      })
       .subscribe();
 
     const refreshWhenVisible = () => {
-      if (document.visibilityState === 'visible') void refresh();
+      if (document.visibilityState === 'visible') void markVisibleNotificationsRead();
+    };
+    const handleServiceWorkerMessage = (event: MessageEvent<{ type?: string }>) => {
+      if (event.data?.type === 'GOODMINTON_PUSH_RECEIVED_VISIBLE') {
+        void markVisibleNotificationsRead();
+      }
     };
     document.addEventListener('visibilitychange', refreshWhenVisible);
     window.addEventListener('focus', refreshWhenVisible);
+    navigator.serviceWorker?.addEventListener('message', handleServiceWorkerMessage);
 
     return () => {
       document.removeEventListener('visibilitychange', refreshWhenVisible);
       window.removeEventListener('focus', refreshWhenVisible);
+      navigator.serviceWorker?.removeEventListener('message', handleServiceWorkerMessage);
       void supabase.removeChannel(channel);
     };
-  }, [refresh, userId]);
+  }, [markVisibleNotificationsRead, userId]);
 
   useEffect(() => {
     if (!isOpen) return;
