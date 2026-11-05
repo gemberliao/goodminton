@@ -54,7 +54,7 @@ const getInitialDefaults = (): EventDefaults => {
     endTime: '22:00',
     eventType: '練球',
     location: '陽光羽球館',
-    courtNumber: 'Court 1-2',
+    courtNumber: '',
     fee: '250',
     maxParticipants: '16',
     notes: ''
@@ -97,7 +97,7 @@ export const AdminEvents: React.FC = () => {
     setEndTime(currentDefaults.endTime || '22:00');
     setEventType(currentDefaults.eventType || '練球');
     setLocation(currentDefaults.location || '陽光羽球館');
-    setCourtNumber(currentDefaults.courtNumber || 'Court 1-2');
+    setCourtNumber('');
     setFee(currentDefaults.fee ?? '250');
     setMaxParticipants(currentDefaults.maxParticipants ?? '16');
     setNotes(currentDefaults.notes || '');
@@ -568,7 +568,7 @@ export const AdminEvents: React.FC = () => {
                     </label>
                     <input
                       type="text"
-                      placeholder="例如：Court 3-4"
+                      placeholder="選填"
                       value={courtNumber}
                       onChange={(e) => setCourtNumber(e.target.value)}
                       className="w-full min-w-0 px-3 sm:px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 font-medium focus:outline-none focus:border-emerald-500 focus:bg-white transition-all"
