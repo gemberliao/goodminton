@@ -170,10 +170,13 @@ export const Navbar: React.FC<Props> = ({ onToggleSidebar, showSidebarToggle = t
                 type="button"
                 onClick={() => setIsGameOpen(true)}
                 className="group relative flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 transition-all hover:border-emerald-300 hover:bg-emerald-100 active:scale-95"
-                title="玩羽球反應挑戰"
-                aria-label="開啟羽球反應挑戰"
+                title="玩新版羽球反應挑戰"
+                aria-label="開啟新版羽球反應挑戰"
               >
-                <Gamepad2 className="h-5 w-5 transition-transform group-hover:-rotate-6 group-hover:scale-110" />
+                <Gamepad2 aria-hidden="true" className="h-5 w-5 transition-transform group-hover:-rotate-6 group-hover:scale-110" />
+                <span aria-hidden="true" className="pointer-events-none absolute -right-1 -top-1 rounded-full bg-emerald-700 px-1 py-0.5 text-[8px] font-black leading-none text-white ring-2 ring-white">
+                  NEW
+                </span>
               </button>
               {/* User Dropdown */}
               <div className="relative">

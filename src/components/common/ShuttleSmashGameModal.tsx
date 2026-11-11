@@ -2145,8 +2145,8 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
         && arena.canBeHit
         && flightProgress < 1;
 
-      const drawLandingIndicator = () => {
-        if (phaseRef.current !== 'playing' || !isPlayerIncomingFlight) return;
+      // Paint every timing target below the rackets, including equipped trail styles.
+      if (phaseRef.current === 'playing' && isPlayerIncomingFlight) {
         const landingCirclePosition = toScreen(arena.landingCircleX, arena.landingCircleY);
         const timingDistance = clamp(timingError / timingWindows.bad, 0, 1);
         const perfectPulse = emphasizeTiming
@@ -2172,9 +2172,7 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
           now,
           quality,
         });
-      };
-
-      if (trailStyle === 'classic') drawLandingIndicator();
+      }
 
       const playerPosition = toScreen(arena.playerX, arena.playerY);
       const cpuPosition = toScreen(arena.cpuX, arena.cpuY);
@@ -2325,7 +2323,6 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
         court: courtStyleRef.current, trail: trailStyleRef.current,
       }, toScreen, now, quality);
 
-      if (trailStyle !== 'classic') drawLandingIndicator();
       context.font = '700 12px system-ui, sans-serif';
       if (portrait) {
         context.textAlign = 'left';
