@@ -1,9 +1,20 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Gamepad2, RotateCcw, ShoppingBag, Trophy, X, Zap } from 'lucide-react';
+import { Coins, Gamepad2, Pause, Play, RotateCcw, ShoppingBag, Trophy, X, Zap } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
+import type { SyncResult } from '../../lib/supabaseErrors';
 import { GameCosmeticsShop } from './GameCosmeticsShop';
-import { RACKET_VISUALS, SHUTTLE_VISUALS } from './gameCosmetics';
-import type { RacketStyle, ShuttleStyle } from '../../types';
+import { GameCosmeticTryout } from './GameCosmeticTryout';
+import { COURT_VISUALS, hasVictoryEffect, RACKET_VISUALS, SHUTTLE_VISUALS, type CosmeticCategory, type GameCosmeticItem } from './gameCosmetics';
+import {
+  drawCourtDecoration, drawFlightTrail, drawRacketAccent, drawShuttleAccent, drawTrailTimingTarget,
+  getFlightTrailWindow,
+} from './gameCosmeticEffects';
+import {
+  CosmeticEvents, drawRacketMotion, TRIAL_EVENT_AT, TRIAL_STAGES, TRIAL_STAGE_LENGTH,
+  type EffectQuality, type TrialMode, type TrialStage,
+} from './gameCosmeticEvents';
+import { FlightHistory } from './gameFlightHistory';
+import type { CourtStyle, RacketStyle, ShuttleGameDifficulty, ShuttleStyle, TrailStyle } from '../../types';
 
 type GamePhase = 'ready' | 'playing' | 'finished';
 type HitQuality = 'none' | 'bad' | 'normal' | 'perfect';
@@ -12,6 +23,33 @@ type CourtZone = 'front' | 'mid' | 'back';
 type SwingSpeedBand = 'slow' | 'medium' | 'fast';
 type IncomingQualityBand = 'bad' | 'normal' | 'good';
 type ShotType = 'clear' | 'drop' | 'smash' | 'drive' | 'push' | 'block' | 'half-smash' | 'net-shot' | 'lift' | 'net-kill';
+
+const EFFECT_QUALITY = 'high';
+const AUTO_TRIAL_STAGES = TRIAL_STAGES.map(({ id }) => id);
+
+interface TryoutState {
+  mode: TrialMode;
+  startedAt: number;
+  stageNumber: number;
+  playedEvent: boolean;
+  hasVictory: boolean;
+}
+
+const GAME_DIFFICULTIES = [
+  { value: 'easy', label: '簡單' },
+  { value: 'hard', label: '困難' },
+] as const;
+
+const WIN_REWARD_COINS: Record<ShuttleGameDifficulty, number> = { easy: 1, hard: 3 };
+
+const GAME_PREVIEW_URL = `${import.meta.env.BASE_URL}shuttle-game-preview.mp4`;
+const GAME_PREVIEW_POSTER = `${import.meta.env.BASE_URL}shuttle-game-preview.webp`;
+
+const EASY_RULES = {
+  powerWindowScale: 1.6,
+  smashMissChance: 0.98,
+  cpuReturnDurationScale: 1.6,
+} as const;
 
 interface ShotProfile {
   duration: number;
@@ -24,6 +62,11 @@ interface DragSample {
   at: number;
   courtX: number;
   courtY: number;
+}
+
+interface TouchSweep {
+  from: DragSample;
+  to: DragSample;
 }
 
 interface RacketMotion {
@@ -133,6 +176,7 @@ const GAME_CONFIG = {
   input: {
     velocitySampleMs: 100,
     maximumVelocity: 3,
+    maximumTouchSweepMs: 50,
   },
   smashPower: 0.96,
   powerTimingPower: {
@@ -311,7 +355,7 @@ const getDefensivePerfectWindow = (incomingShotQuality = 0.5) => {
   ) * windowScale;
 };
 
-const getPowerTimingWindow = (incomingShotQuality = 0.5) => {
+const getPowerTimingWindow = (incomingShotQuality: number, difficulty: ShuttleGameDifficulty) => {
   const quality = clamp(incomingShotQuality, 0, 1);
   const timingWindows = getTimingWindows(quality);
   const powerWindowRatio = lerp(
@@ -319,7 +363,7 @@ const getPowerTimingWindow = (incomingShotQuality = 0.5) => {
     GAME_CONFIG.timing.powerWindowRatioMin,
     quality
   );
-  return timingWindows.perfect * powerWindowRatio;
+  return timingWindows.perfect * powerWindowRatio * (difficulty === 'easy' ? EASY_RULES.powerWindowScale : 1);
 };
 
 interface ShuttleState {
@@ -327,11 +371,6 @@ interface ShuttleState {
   y: number;
   vx: number;
   vy: number;
-}
-
-interface TrailPoint {
-  x: number;
-  y: number;
 }
 
 interface ShotQualityBreakdown {
@@ -370,6 +409,7 @@ interface ArenaState {
   receiverReady: boolean;
   canBeHit: boolean;
   dragSamples: DragSample[];
+  classicTrail: { x: number; y: number }[];
   playerHitThisFlight: boolean;
   rallyStrokeCount: number;
   cpuWillMiss: boolean;
@@ -399,7 +439,6 @@ interface ArenaState {
   waitingForServe: boolean;
   pauseUntil: number;
   lastTime: number;
-  trail: TrailPoint[];
   hitAt: number;
   hitX: number;
   hitY: number;
@@ -413,7 +452,8 @@ interface ShuttleSmashGameModalProps {
     winner: 'player' | 'cpu';
     playerScore: number;
     cpuScore: number;
-  }) => void | Promise<void>;
+    difficulty: ShuttleGameDifficulty;
+  }) => Promise<SyncResult>;
 }
 
 const clamp = (value: number, minimum: number, maximum: number) => Math.max(minimum, Math.min(maximum, value));
@@ -573,18 +613,82 @@ const newServe = (direction: 1 | -1): ShuttleState => ({
   vy: (Math.random() - 0.5) * 0.28,
 });
 
+const GameIntroBackground = () => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [reducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const [playing, setPlaying] = useState(false);
+  const mediaClassName = 'absolute inset-0 h-full w-full object-cover object-top md:object-contain md:object-center';
+
+  const togglePlayback = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused) void video.play().catch(() => undefined);
+    else video.pause();
+  };
+
+  return (
+    <>
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+        <img src={GAME_PREVIEW_POSTER} alt="" className={mediaClassName} />
+        {!reducedMotion && (
+          <video
+            ref={videoRef}
+            src={GAME_PREVIEW_URL}
+            poster={GAME_PREVIEW_POSTER}
+            autoPlay
+            muted
+            loop
+            playsInline
+            onPlay={() => setPlaying(true)}
+            onPause={() => setPlaying(false)}
+            className={mediaClassName}
+          />
+        )}
+      </div>
+      {!reducedMotion && (
+        <button
+          type="button"
+          onClick={togglePlayback}
+          aria-label={playing ? '暫停背景影片' : '播放背景影片'}
+          className="absolute right-16 top-4 z-10 grid size-11 place-items-center rounded-full bg-slate-950/75 text-slate-200 transition-colors hover:bg-slate-900 focus-visible:outline-2 focus-visible:outline-emerald-400"
+        >
+          {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+        </button>
+      )}
+    </>
+  );
+};
+
 export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ onClose, onGameComplete }) => {
   const currentUserId = useAppStore((state) => state.currentUser.id);
   const equippedLoadout = useAppStore((state) => state.gameLoadouts.find((loadout) => loadout.user_id === state.currentUser.id));
-  const equippedRacketStyle = equippedLoadout?.racket_style || 'classic';
-  const equippedShuttleStyle = equippedLoadout?.shuttle_style || 'classic';
+  const [trialItem, setTrialItem] = useState<GameCosmeticItem | null>(null);
+  const [trialMode, setTrialMode] = useState<TrialMode>('move');
+  const [trialStage, setTrialStage] = useState<TrialStage>('move');
+  const [shopCategory, setShopCategory] = useState<CosmeticCategory>('racket');
+  const trialRef = useRef<TryoutState | null>(null);
+  const [effects] = useState(() => new CosmeticEvents());
+  const [flightHistory] = useState(() => new FlightHistory());
+  const equippedRacketStyle = trialItem?.category === 'racket' ? trialItem.style as RacketStyle : equippedLoadout?.racket_style || 'classic';
+  const equippedShuttleStyle = trialItem?.category === 'shuttle' ? trialItem.style as ShuttleStyle : equippedLoadout?.shuttle_style || 'classic';
+  const equippedCourtStyle = trialItem?.category === 'court' ? trialItem.style as CourtStyle : equippedLoadout?.court_style || 'classic';
+  const equippedTrailStyle = trialItem?.category === 'trail' ? trialItem.style as TrailStyle : equippedLoadout?.trail_style || 'classic';
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef(0);
+  const activeTouchRef = useRef<{ pointerId: number; sample: DragSample | null } | null>(null);
+  const touchSweepsRef = useRef<TouchSweep[]>([]);
   const audioContextRef = useRef<AudioContext | null>(null);
   const onGameCompleteRef = useRef(onGameComplete);
   const racketStyleRef = useRef<RacketStyle>(equippedRacketStyle);
   const shuttleStyleRef = useRef<ShuttleStyle>(equippedShuttleStyle);
+  const courtStyleRef = useRef<CourtStyle>(equippedCourtStyle);
+  const trailStyleRef = useRef<TrailStyle>(equippedTrailStyle);
   const phaseRef = useRef<GamePhase>('ready');
+  const [difficulty, setDifficulty] = useState<ShuttleGameDifficulty>('easy');
+  const matchDifficultyRef = useRef<ShuttleGameDifficulty>(difficulty);
+  const matchNumberRef = useRef(0);
+  const [resultSaveError, setResultSaveError] = useState('');
+  const difficultyLabel = difficulty === 'easy' ? '簡單' : '困難';
   const arenaRef = useRef<ArenaState>({
     playerX: 0.085,
     playerY: 0.5,
@@ -611,6 +715,7 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
     receiverReady: false,
     canBeHit: true,
     dragSamples: [],
+    classicTrail: [],
     playerHitThisFlight: false,
     rallyStrokeCount: 0,
     cpuWillMiss: false,
@@ -648,7 +753,6 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
     waitingForServe: true,
     pauseUntil: Number.POSITIVE_INFINITY,
     lastTime: 0,
-    trail: [],
     hitAt: 0,
     hitX: 0.5,
     hitY: 0.5,
@@ -668,7 +772,9 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
   useEffect(() => {
     racketStyleRef.current = equippedRacketStyle;
     shuttleStyleRef.current = equippedShuttleStyle;
-  }, [currentUserId, equippedRacketStyle, equippedShuttleStyle]);
+    courtStyleRef.current = equippedCourtStyle;
+    trailStyleRef.current = equippedTrailStyle;
+  }, [currentUserId, equippedRacketStyle, equippedShuttleStyle, equippedCourtStyle, equippedTrailStyle]);
 
   const playHitSound = (quality: Exclude<HitQuality, 'none'>, isSmash = false, power = 0.65) => {
     const audioContext = audioContextRef.current;
@@ -692,6 +798,13 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
   };
 
   const startGame = () => {
+    matchDifficultyRef.current = difficulty;
+    matchNumberRef.current += 1;
+    effects.reset();
+    flightHistory.reset();
+    activeTouchRef.current = null;
+    touchSweepsRef.current = [];
+    setResultSaveError('');
     if (!audioContextRef.current && typeof AudioContext !== 'undefined') {
       audioContextRef.current = new AudioContext();
     }
@@ -735,6 +848,7 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
     arena.receiverReady = false;
     arena.canBeHit = false;
     arena.dragSamples = [];
+    arena.classicTrail.length = 0;
     arena.playerHitThisFlight = false;
     arena.rallyStrokeCount = 0;
     arena.cpuWillMiss = false;
@@ -772,7 +886,6 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
     arena.waitingForServe = true;
     arena.pauseUntil = Number.POSITIVE_INFINITY;
     arena.lastTime = 0;
-    arena.trail = [];
     arena.hitAt = 0;
     phaseRef.current = 'playing';
     setPlayerScore(0);
@@ -782,10 +895,37 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
     setPhase('playing');
   };
 
+  const startTryout = (item: GameCosmeticItem, mode: TrialMode) => {
+    trialRef.current = { mode, startedAt: performance.now(), stageNumber: -1, playedEvent: false, hasVictory: hasVictoryEffect(item) };
+    setTrialItem(item);
+    setTrialMode(mode);
+    setShopCategory(item.category);
+    setResultSaveError('');
+    if (mode === 'free') {
+      startGame();
+    } else {
+      phaseRef.current = 'playing';
+      setPhase('playing');
+      setWaitingForServe(false);
+    }
+  };
+
+  const leaveTryout = () => {
+    trialRef.current = null;
+    effects.reset();
+    flightHistory.reset();
+    activeTouchRef.current = null;
+    touchSweepsRef.current = [];
+    setTrialItem(null);
+    phaseRef.current = 'ready';
+    setPhase('ready');
+  };
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        onClose();
+        if (trialRef.current) leaveTryout();
+        else onClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -834,6 +974,7 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
       arena.receiverReady = false;
       arena.canBeHit = false;
       arena.dragSamples = [];
+      arena.classicTrail.length = 0;
       arena.playerHitThisFlight = false;
       arena.rallyStrokeCount = 0;
       arena.cpuWillMiss = false;
@@ -858,7 +999,6 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
       arena.shakeUntil = 0;
       arena.waitingForServe = true;
       arena.pauseUntil = Number.POSITIVE_INFINITY;
-      arena.trail = [];
       arena.hitAt = 0;
       setWaitingForServe(true);
     };
@@ -866,6 +1006,7 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
     const awardPoint = (side: 'player' | 'cpu', now: number) => {
       const arena = arenaRef.current;
       arena.canBeHit = false;
+      effects.emit('score', now, arena.shuttle.x, arena.shuttle.y, side === 'player');
       if (side === 'player') {
         arena.playerScore += 1;
         setPlayerScore(arena.playerScore);
@@ -876,16 +1017,28 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
 
       if (arena.playerScore >= GAME_CONFIG.pointsToWin || arena.cpuScore >= GAME_CONFIG.pointsToWin) {
         const nextWinner = arena.playerScore >= GAME_CONFIG.pointsToWin ? 'player' : 'cpu';
+        if (nextWinner === 'player') effects.emit('win', now, 0.15, 0.5, true);
         phaseRef.current = 'finished';
         arena.waitingForServe = false;
         arena.pauseUntil = Number.POSITIVE_INFINITY;
         setWaitingForServe(false);
         setWinner(nextWinner);
         setPhase('finished');
+        if (trialRef.current) return;
+        const finishedMatch = matchNumberRef.current;
         void onGameCompleteRef.current?.({
           winner: nextWinner,
           playerScore: arena.playerScore,
-          cpuScore: arena.cpuScore
+          cpuScore: arena.cpuScore,
+          difficulty: matchDifficultyRef.current,
+        }).then((sync) => {
+          if (!sync.success && finishedMatch === matchNumberRef.current) {
+            setResultSaveError(sync.message || '戰績儲存失敗，請稍後再試。');
+          }
+        }, () => {
+          if (finishedMatch === matchNumberRef.current) {
+            setResultSaveError('戰績儲存失敗，請稍後再試。');
+          }
         });
       } else {
         prepareNextRally(side);
@@ -987,6 +1140,9 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
         );
         duration *= distanceScale;
       }
+      if (receiver === 'player' && matchDifficultyRef.current === 'easy' && shotQuality !== 'bad') {
+        duration *= EASY_RULES.cpuReturnDurationScale;
+      }
       const resolvedArcScale = profile.arcScale * (1.08 - power * 0.13) * qualityPhysics.arcScale;
       const receiverX = receiver === 'cpu' ? arena.cpuX : arena.playerX;
       const receiverY = receiver === 'cpu' ? arena.cpuY : arena.playerY;
@@ -1024,6 +1180,9 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
             ? GAME_CONFIG.aiResponse.greenShotMissChance
           : perfectMissChance;
       const cpuMissQualityThreshold = isPlayerPowerShot ? 0.62 : isPlayerGreenSetupShot ? 0.82 : 0.72;
+      const easyMode = matchDifficultyRef.current === 'easy';
+      const isUnreturnablePowerShot = easyMode && isPlayerPowerShot;
+      const isEasySmash = easyMode && shotType === 'smash';
       const shotLandingIsOut = isLandingOutOfBounds(targetX, resolvedTargetY);
 
       arena.flightStartX = startX;
@@ -1049,10 +1208,10 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
       arena.cpuWillMiss = receiver === 'cpu'
         && (
           shotLandingIsOut
-          || (
-            shotQualityBreakdown.total >= cpuMissQualityThreshold
-            && Math.random() < cpuMissChance
-          )
+          || isUnreturnablePowerShot
+          || (isEasySmash
+            ? Math.random() < EASY_RULES.smashMissChance
+            : shotQualityBreakdown.total >= cpuMissQualityThreshold && Math.random() < cpuMissChance)
         );
       arena.shotArcScale = resolvedArcScale;
       arena.shotType = shotType;
@@ -1070,7 +1229,7 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
       arena.pauseUntil = now;
       arena.shuttle.vx = (arena.landingX - startX) / (duration / 1000);
       arena.shuttle.vy = (arena.landingY - startY) / (duration / 1000);
-      arena.trail = [];
+      arena.classicTrail.length = 0;
       arena.rallyStrokeCount += 1;
     };
 
@@ -1134,7 +1293,7 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
     const evaluatePlayerHit = (contactAt: number, motion: RacketMotion, contactQuality: number): HitResult => {
       const arena = arenaRef.current;
       const timingWindows = getTimingWindows(arena.incomingShotQuality);
-      const powerTimingWindow = getPowerTimingWindow(arena.incomingShotQuality);
+      const powerTimingWindow = getPowerTimingWindow(arena.incomingShotQuality, matchDifficultyRef.current);
       const predictedOptimalHitTime = getPredictedOptimalHitTime(arena);
       const timingError = Math.abs(contactAt - predictedOptimalHitTime);
       const baseTimingQuality: Exclude<HitQuality, 'none'> = timingError <= timingWindows.perfect
@@ -1147,7 +1306,7 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
       const powerTiming = !canUsePreciseDefense
         && arena.rallyStrokeCount > 0
         && timingError <= powerTimingWindow;
-      const timingQuality = defensivePerfect ? 'normal' : baseTimingQuality;
+      const timingQuality = powerTiming ? 'perfect' : defensivePerfect ? 'normal' : baseTimingQuality;
       const timingEfficiency = defensivePerfect ? 0.92 : GAME_CONFIG.timingEfficiency[timingQuality];
       const contactEfficiency = 0.68 + contactQuality * 0.32;
       const effectivePower = clamp(motion.dragPower * timingEfficiency * contactEfficiency, 0, 1);
@@ -1212,7 +1371,9 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
         ? 'perfect'
         : aiExecutionScore >= GAME_CONFIG.aiTiming.normalMinimum ? 'normal' : 'bad';
       const hasCleanTiming = arena.aiHadSetupTime && timingScore >= 0.52;
-      const hasPowerTiming = arena.aiHadSetupTime && aiTimingQuality === 'perfect';
+      const hasPowerTiming = matchDifficultyRef.current === 'hard'
+        && arena.aiHadSetupTime
+        && aiTimingQuality === 'perfect';
       const preciseDefenseChance = clamp(
         GAME_CONFIG.aiPreciseDefense.minimumChance
           + contactScore * GAME_CONFIG.aiPreciseDefense.contactWeight
@@ -1223,7 +1384,8 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
         GAME_CONFIG.aiPreciseDefense.minimumChance,
         GAME_CONFIG.aiPreciseDefense.maximumChance
       );
-      const aiPreciseDefense = (forcedDefense || playerShotQuality >= 0.68)
+      const aiPreciseDefense = matchDifficultyRef.current === 'hard'
+        && (forcedDefense || playerShotQuality >= 0.68)
         && arena.aiHadSetupTime
         && Math.random() < preciseDefenseChance;
       const opportunityBonusScale = 0.35 + qualityPressure * 0.65;
@@ -1462,6 +1624,7 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
         aiAccuracy,
         cpuPowerTiming
       );
+      effects.emit(aiShot.shotType === 'smash' ? 'smash' : 'hit', now, arena.hitX, arena.hitY, false, arena.shuttle.vx, arena.shuttle.vy);
       arena.rallyPressure = clamp(
         arena.rallyPressure * GAME_CONFIG.rallyPressure.memory
           - (arena.aiShotQuality - 0.5) * GAME_CONFIG.rallyPressure.aiResponseWeight,
@@ -1498,7 +1661,7 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
       };
     };
 
-    const getPlayerContactQuality = (now: number) => {
+    const getPlayerContact = (now: number, touchSweeps: TouchSweep[]) => {
       const arena = arenaRef.current;
       const rect = canvas.getBoundingClientRect();
       const width = Math.max(1, rect.width);
@@ -1506,21 +1669,58 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
       const portrait = GAME_CONFIG.court.forcePortrait || height >= width;
       const courtLayout = getCourtLayout(width, height, portrait);
       const toScreen = (logicalX: number, logicalY: number) => courtToScreen(logicalX, logicalY, courtLayout, portrait);
-      const playerPosition = toScreen(arena.playerX, arena.playerY);
-      const shuttlePosition = toScreen(arena.shuttle.x, arena.shuttle.y);
-      const flightProgress = clamp((now - arena.flightStartedAt) / arena.flightDuration, 0, 1);
-      const arcLift = getArcLiftPixels(flightProgress, arena.shotArcScale, courtLayout, portrait);
-      const visibleShuttleY = shuttlePosition.y - arcLift;
       const radiusX = portrait ? courtLayout.width * 0.105 + 8 : 18;
       const radiusY = portrait ? 18 : courtLayout.height * 0.105 + 8;
-      const normalizedDistance = Math.hypot(
-        (shuttlePosition.x - playerPosition.x) / radiusX,
-        (visibleShuttleY - playerPosition.y) / radiusY
-      );
-      return normalizedDistance <= 1 ? clamp(1 - normalizedDistance, 0, 1) : null;
+      const flightEnd = arena.flightStartedAt + arena.flightDuration;
+      const offsetAt = (at: number, courtX: number, courtY: number) => {
+        const progress = clamp((at - arena.flightStartedAt) / arena.flightDuration, 0, 1);
+        const shuttle = toScreen(
+          lerp(arena.flightStartX, arena.landingX, progress),
+          lerp(arena.flightStartY, arena.landingY, progress)
+        );
+        const player = toScreen(courtX, courtY);
+        const arcLift = getArcLiftPixels(progress, arena.shotArcScale, courtLayout, portrait);
+        return { x: (shuttle.x - player.x) / radiusX, y: (shuttle.y - arcLift - player.y) / radiusY };
+      };
+
+      for (const { from, to } of touchSweeps) {
+        const start = Math.max(from.at, to.at - GAME_CONFIG.input.maximumTouchSweepMs);
+        const validStart = Math.max(start, arena.flightStartedAt, arena.pauseUntil);
+        const validEnd = Math.min(to.at, flightEnd - 0.001);
+        if (validStart > validEnd) continue;
+
+        // Compare both moving positions over the same interval, in units of the hit ellipse.
+        const startFraction = to.at === start ? 0 : (validStart - start) / (to.at - start);
+        const endFraction = to.at === start ? 1 : (validEnd - start) / (to.at - start);
+        const a = offsetAt(validStart, lerp(from.courtX, to.courtX, startFraction), lerp(from.courtY, to.courtY, startFraction));
+        const b = offsetAt(validEnd, lerp(from.courtX, to.courtX, endFraction), lerp(from.courtY, to.courtY, endFraction));
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const lengthSquared = dx * dx + dy * dy;
+        const fraction = lengthSquared > 0 ? clamp(-(a.x * dx + a.y * dy) / lengthSquared, 0, 1) : 0;
+        const distance = Math.hypot(a.x + fraction * dx, a.y + fraction * dy);
+        const at = lerp(validStart, validEnd, fraction);
+        if (distance <= 1) return { at, quality: 1 - distance };
+      }
+
+      if (now >= flightEnd) return null;
+      const offset = offsetAt(now, arena.playerX, arena.playerY);
+      const distance = Math.hypot(offset.x, offset.y);
+      return distance <= 1 ? { at: now, quality: 1 - distance } : null;
+    };
+
+    const sampleClassicTrail = (arena: ArenaState, sliding = false) => {
+      if (trailStyleRef.current !== 'classic') return;
+      const speedIntensity = clamp((1450 - arena.flightDuration) / 880, 0, 1);
+      const qualityBonus = arena.lastShotQuality === 'perfect' ? 5 : arena.lastShotQuality === 'bad' ? -3 : 0;
+      const limit = sliding ? 9 : Math.max(4, Math.round(7 + speedIntensity * 10 + qualityBonus));
+      arena.classicTrail.push({ x: arena.shuttle.x, y: arena.shuttle.y });
+      if (arena.classicTrail.length > limit) arena.classicTrail.shift();
     };
 
     const update = (now: number, delta: number) => {
+      const touchSweeps = touchSweepsRef.current;
+      if (touchSweeps.length > 0) touchSweepsRef.current = [];
       if (phaseRef.current !== 'playing') return;
       const arena = arenaRef.current;
       const seconds = Math.min(delta, 34) / 1000;
@@ -1554,8 +1754,7 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
           + (arena.landingSlideEndX - arena.landingSlideStartX) * easedProgress;
         arena.shuttle.y = arena.landingSlideStartY
           + (arena.landingSlideEndY - arena.landingSlideStartY) * easedProgress;
-        arena.trail.push({ x: arena.shuttle.x, y: arena.shuttle.y });
-        if (arena.trail.length > 9) arena.trail.shift();
+        sampleClassicTrail(arena, true);
 
         if (slideProgress >= 1) {
           const winner = arena.landingSlideWinner;
@@ -1588,7 +1787,11 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
         arena.landingCircleY += (predictedLandingY - arena.landingCircleY) * landingCircleBlend;
       }
 
-      if (flightProgress >= 1) {
+      const playerContact = arena.receiver === 'player' && arena.canBeHit && !arena.playerHitThisFlight
+        ? getPlayerContact(now, touchSweeps)
+        : null;
+
+      if (flightProgress >= 1 && !playerContact) {
         arena.canBeHit = false;
         if (landingIsOut) {
           beginLandingSlide(arena.receiver === 'cpu' ? 'cpu' : 'player', now);
@@ -1600,69 +1803,72 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
         }
       }
 
-      if (arena.receiver === 'player' && arena.canBeHit && !arena.playerHitThisFlight && flightProgress < 1) {
-        const contactQuality = getPlayerContactQuality(now);
-        if (contactQuality !== null) {
-          arena.canBeHit = false;
-          arena.playerHitThisFlight = true;
-          const motion = getRacketMotion(now);
-          const hitResult = evaluatePlayerHit(now, motion, contactQuality);
-          const playerShot = choosePlayerShot(hitResult);
-          arena.hitAt = now;
-          arena.hitX = arena.shuttle.x;
-          arena.hitY = arena.shuttle.y;
-          arena.lastHitPerfect = hitResult.timingQuality === 'perfect';
-          arena.lastHitDefensivePerfect = hitResult.defensivePerfect;
-          const isPlayerSmash = playerShot.shotType === 'smash';
-          const playerPowerTiming = hitResult.powerTiming;
-          arena.lastPlayerTimingQuality = hitResult.timingQuality;
-          arena.lastPlayerHitZone = getCourtZone(arena.shuttle.x, 'player');
-          arena.lastPlayerDefensivePerfect = hitResult.defensivePerfect;
-          arena.lastPlayerWasPowerAttack = playerPowerTiming;
-          arena.lastHitSmash = playerPowerTiming;
-          const defensiveSpeedBand = getSwingSpeedBand(hitResult.swingPower);
-          const defensivePowerFloor = defensiveSpeedBand === 'fast'
-            ? GAME_CONFIG.defensiveRecovery.fastPowerFloor
-            : defensiveSpeedBand === 'medium'
-              ? GAME_CONFIG.defensiveRecovery.mediumPowerFloor
-              : GAME_CONFIG.defensiveRecovery.slowPowerFloor;
-          const playerShotPower = playerPowerTiming
-            ? GAME_CONFIG.powerTimingPower[defensiveSpeedBand]
-            : isPlayerSmash
-              ? 0.86
-            : hitResult.defensivePerfect
-              ? Math.max(hitResult.effectivePower, defensivePowerFloor)
-              : hitResult.effectivePower;
-          const playerExecutionQuality = hitResult.defensivePerfect ? 'perfect' : hitResult.timingQuality;
-          arena.shakeStrength = playerPowerTiming
-            ? 5
-            : hitResult.defensivePerfect
-              ? 2.2
-              : 0.5 + playerShotPower * 2.4 + (hitResult.timingQuality === 'perfect' ? 1.2 : 0);
-          arena.shakeUntil = now + (playerPowerTiming ? 140 : hitResult.defensivePerfect ? 110 : hitResult.timingQuality === 'perfect' ? 105 : 65);
-          playHitSound(playerExecutionQuality, playerPowerTiming, playerShotPower);
-          launchShot(
-            'cpu',
-            playerShot.shotType,
-            playerShot.targetY,
-            now,
-            playerExecutionQuality,
-            playerShotPower,
-            hitResult.accuracy,
-            playerPowerTiming
-          );
-          const playerPressureSignal = (arena.playerShotQuality - 0.5) * GAME_CONFIG.rallyPressure.playerQualityWeight
-            + (hitResult.timingQuality === 'perfect' ? GAME_CONFIG.rallyPressure.greenBonus : 0)
-            + (hitResult.defensivePerfect ? GAME_CONFIG.rallyPressure.defensivePerfectBonus : 0)
-            + (playerPowerTiming ? GAME_CONFIG.rallyPressure.powerAttackBonus : 0)
-            - (hitResult.timingQuality === 'bad' ? GAME_CONFIG.rallyPressure.badTimingPenalty : 0);
-          arena.rallyPressure = clamp(
-            arena.rallyPressure * GAME_CONFIG.rallyPressure.memory + playerPressureSignal,
-            -1,
-            1
-          );
-          return;
+      if (playerContact) {
+        if (playerContact.at !== now) {
+          const contactProgress = (playerContact.at - arena.flightStartedAt) / arena.flightDuration;
+          shuttle.x = lerp(arena.flightStartX, arena.landingX, contactProgress);
+          shuttle.y = lerp(arena.flightStartY, arena.landingY, contactProgress);
         }
+        arena.canBeHit = false;
+        arena.playerHitThisFlight = true;
+        const motion = getRacketMotion(Math.max(now, playerContact.at));
+        const hitResult = evaluatePlayerHit(playerContact.at, motion, playerContact.quality);
+        const playerShot = choosePlayerShot(hitResult);
+        arena.hitAt = now;
+        arena.hitX = arena.shuttle.x;
+        arena.hitY = arena.shuttle.y;
+        arena.lastHitPerfect = hitResult.timingQuality === 'perfect';
+        arena.lastHitDefensivePerfect = hitResult.defensivePerfect;
+        const isPlayerSmash = playerShot.shotType === 'smash';
+        const playerPowerTiming = hitResult.powerTiming;
+        arena.lastPlayerTimingQuality = hitResult.timingQuality;
+        arena.lastPlayerHitZone = getCourtZone(arena.shuttle.x, 'player');
+        arena.lastPlayerDefensivePerfect = hitResult.defensivePerfect;
+        arena.lastPlayerWasPowerAttack = playerPowerTiming;
+        arena.lastHitSmash = playerPowerTiming;
+        const defensiveSpeedBand = getSwingSpeedBand(hitResult.swingPower);
+        const defensivePowerFloor = defensiveSpeedBand === 'fast'
+          ? GAME_CONFIG.defensiveRecovery.fastPowerFloor
+          : defensiveSpeedBand === 'medium'
+            ? GAME_CONFIG.defensiveRecovery.mediumPowerFloor
+            : GAME_CONFIG.defensiveRecovery.slowPowerFloor;
+        const playerShotPower = playerPowerTiming
+          ? GAME_CONFIG.powerTimingPower[defensiveSpeedBand]
+          : isPlayerSmash
+            ? 0.86
+          : hitResult.defensivePerfect
+            ? Math.max(hitResult.effectivePower, defensivePowerFloor)
+            : hitResult.effectivePower;
+        const playerExecutionQuality = hitResult.defensivePerfect ? 'perfect' : hitResult.timingQuality;
+        arena.shakeStrength = playerPowerTiming
+          ? 5
+          : hitResult.defensivePerfect
+            ? 2.2
+            : 0.5 + playerShotPower * 2.4 + (hitResult.timingQuality === 'perfect' ? 1.2 : 0);
+        arena.shakeUntil = now + (playerPowerTiming ? 140 : hitResult.defensivePerfect ? 110 : hitResult.timingQuality === 'perfect' ? 105 : 65);
+        playHitSound(playerExecutionQuality, playerPowerTiming, playerShotPower);
+        launchShot(
+          'cpu',
+          playerShot.shotType,
+          playerShot.targetY,
+          now,
+          playerExecutionQuality,
+          playerShotPower,
+          hitResult.accuracy,
+          playerPowerTiming
+        );
+        effects.emit(isPlayerSmash ? 'smash' : 'hit', now, arena.hitX, arena.hitY, true, arena.shuttle.vx, arena.shuttle.vy);
+        const playerPressureSignal = (arena.playerShotQuality - 0.5) * GAME_CONFIG.rallyPressure.playerQualityWeight
+          + (hitResult.timingQuality === 'perfect' ? GAME_CONFIG.rallyPressure.greenBonus : 0)
+          + (hitResult.defensivePerfect ? GAME_CONFIG.rallyPressure.defensivePerfectBonus : 0)
+          + (playerPowerTiming ? GAME_CONFIG.rallyPressure.powerAttackBonus : 0)
+          - (hitResult.timingQuality === 'bad' ? GAME_CONFIG.rallyPressure.badTimingPenalty : 0);
+        arena.rallyPressure = clamp(
+          arena.rallyPressure * GAME_CONFIG.rallyPressure.memory + playerPressureSignal,
+          -1,
+          1
+        );
+        return;
       }
 
       if (
@@ -1681,14 +1887,7 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
         arena.receiverReady = true;
       }
 
-      arena.trail.push({ x: shuttle.x, y: shuttle.y });
-      const speedIntensity = clamp((1450 - arena.flightDuration) / 880, 0, 1);
-      const qualityTrailBonus = arena.lastShotQuality === 'perfect'
-        ? 5
-        : arena.lastShotQuality === 'bad' ? -3 : 0;
-      const trailLength = Math.max(4, Math.round(7 + speedIntensity * 10 + qualityTrailBonus));
-      if (arena.trail.length > trailLength) arena.trail.shift();
-
+      sampleClassicTrail(arena);
       if (arena.receiver === 'player') {
         return;
       }
@@ -1714,12 +1913,13 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
       fillColor: string,
       glowColor: string,
       isPlayer: boolean,
-      portrait: boolean
+      portrait: boolean,
+      quality: EffectQuality,
     ) => {
       ctx.save();
       ctx.translate(x, y);
       ctx.shadowColor = glowColor;
-      ctx.shadowBlur = isPlayer ? 14 : 9;
+      ctx.shadowBlur = quality === 'low' ? 0 : quality === 'medium' ? 5 : isPlayer ? 14 : 9;
       ctx.fillStyle = fillColor;
       ctx.beginPath();
       ctx.ellipse(0, 0, portrait ? crossSize * 0.105 : 10, portrait ? 10 : crossSize * 0.105, 0, 0, Math.PI * 2);
@@ -1772,15 +1972,25 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
       ctx.restore();
     };
 
-    const drawShuttle = (ctx: CanvasRenderingContext2D, x: number, y: number, angle: number) => {
-      const visual = SHUTTLE_VISUALS[shuttleStyleRef.current];
-      const pulse = (Math.sin(performance.now() / 130) + 1) / 2;
+    const drawShuttle = (
+      ctx: CanvasRenderingContext2D, x: number, y: number, angle: number,
+      now: number, quality: EffectQuality, smash: number,
+    ) => {
+      const style = shuttleStyleRef.current;
+      const visual = SHUTTLE_VISUALS[style];
+      const pulse = (Math.sin(now / 130) + 1) / 2;
       ctx.save();
       ctx.translate(x, y);
       ctx.rotate(angle);
+      if (visual.effectLevel > 0) drawShuttleAccent(ctx, style, now, quality, smash);
       ctx.shadowColor = visual.glow;
-      ctx.shadowBlur = visual.effectLevel === 0 ? 9 : 12 + visual.effectLevel * 3 + pulse * 4;
+      ctx.shadowBlur = quality === 'low' ? 0 : (6 + visual.effectLevel * 3 + pulse * 3) * (quality === 'medium' ? 0.7 : 1);
       ctx.fillStyle = visual.feather;
+      if (visual.featherGradient) {
+        const gradient = ctx.createLinearGradient(0, -8, 0, 8);
+        visual.featherGradient.forEach((color, index, colors) => gradient.addColorStop(index / (colors.length - 1), color));
+        ctx.fillStyle = gradient;
+      }
       ctx.beginPath();
       ctx.moveTo(-18, -8);
       ctx.quadraticCurveTo(-22, 0, -18, 8);
@@ -1789,6 +1999,20 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
       ctx.closePath();
       ctx.fill();
       ctx.shadowBlur = 0;
+      if (style === 'rainbow' || style === 'neon') {
+        const colors = style === 'rainbow'
+          ? ['#fb7185', '#fb923c', '#fde047', '#4ade80', '#38bdf8', '#c084fc']
+          : ['#a855f7', '#22d3ee'];
+        ctx.save();
+        ctx.clip();
+        ctx.rotate(Math.sin(now / 210) * 0.12);
+        const band = 16 / colors.length;
+        for (let i = 0; i < colors.length; i += 1) {
+          ctx.fillStyle = colors[(i + Math.floor(now / (style === 'neon' ? 170 : 260))) % colors.length];
+          ctx.fillRect(-23, -8 + i * band, 19, band + 0.4);
+        }
+        ctx.restore();
+      }
       ctx.strokeStyle = visual.stroke;
       ctx.lineWidth = 1.3;
       ctx.beginPath();
@@ -1808,45 +2032,27 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
       ctx.lineWidth = 1.5;
       ctx.stroke();
 
-      if (visual.effectLevel >= 2) {
-        const particleCount = visual.effectLevel === 3 ? 5 : 3;
-        for (let index = 0; index < particleCount; index += 1) {
-          const phase = performance.now() / (190 - visual.effectLevel * 20) + index * 2.1;
-          const particleX = -16 - index * 5 - pulse * 4;
-          const particleY = Math.sin(phase) * (5 + index * 1.2);
-          ctx.globalAlpha = 0.45 + (index % 2) * 0.2;
-          ctx.fillStyle = visual.effectLevel === 3 && index % 2 ? '#e879f9' : visual.stroke;
-          ctx.beginPath();
-          ctx.arc(particleX, particleY, visual.effectLevel === 3 ? 2.1 : 1.7, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        ctx.globalAlpha = 1;
-      }
-
-      if (visual.effectLevel === 3) {
-        ctx.strokeStyle = pulse > 0.5 ? '#d9f99d' : '#e879f9';
-        ctx.lineWidth = 1.4;
-        ctx.globalAlpha = 0.8;
+      if (visual.core) {
+        ctx.fillStyle = visual.core;
         ctx.beginPath();
-        ctx.moveTo(-25, -4);
-        ctx.lineTo(-20, 1);
-        ctx.lineTo(-15, -3);
-        ctx.lineTo(-10, 2);
-        ctx.stroke();
+        ctx.arc(4, 0, 2.15 + pulse * 0.9 + smash * 0.6, 0, Math.PI * 2);
+        ctx.fill();
       }
       ctx.restore();
     };
 
-    const draw = (now: number) => {
+    const draw = (now: number, effectNow = now) => {
       const rect = canvas.getBoundingClientRect();
       const width = Math.max(1, rect.width);
       const height = Math.max(1, rect.height);
+      const quality = EFFECT_QUALITY;
       const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
       const nextWidth = Math.round(width * pixelRatio);
       const nextHeight = Math.round(height * pixelRatio);
       if (canvas.width !== nextWidth || canvas.height !== nextHeight) {
         canvas.width = nextWidth;
         canvas.height = nextHeight;
+        flightHistory.reset();
       }
       context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
       context.clearRect(0, 0, width, height);
@@ -1861,7 +2067,8 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
       const courtLayout = getCourtLayout(width, height, portrait);
       const toScreen = (logicalX: number, logicalY: number) => courtToScreen(logicalX, logicalY, courtLayout, portrait);
 
-      context.fillStyle = '#07131f';
+      const courtVisual = COURT_VISUALS[courtStyleRef.current];
+      context.fillStyle = courtVisual.surround;
       context.fillRect(0, 0, width, height);
       const background = context.createLinearGradient(
         courtLayout.left,
@@ -1869,9 +2076,9 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
         courtLayout.left + courtLayout.width,
         courtLayout.top + courtLayout.height
       );
-      background.addColorStop(0, '#10b981');
-      background.addColorStop(0.55, '#059669');
-      background.addColorStop(1, '#0f766e');
+      background.addColorStop(0, courtVisual.colors[0]);
+      background.addColorStop(0.55, courtVisual.colors[1]);
+      background.addColorStop(1, courtVisual.colors[2]);
       context.save();
       context.shadowColor = 'rgba(0,0,0,0.32)';
       context.shadowBlur = 22;
@@ -1879,7 +2086,11 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
       context.fillRect(courtLayout.left, courtLayout.top, courtLayout.width, courtLayout.height);
       context.restore();
 
-      context.strokeStyle = 'rgba(255,255,255,0.58)';
+      drawCourtDecoration(context, courtStyleRef.current, courtLayout, now, quality);
+      effects.drawCourt(context, {
+        x: courtLayout.left, y: courtLayout.top, width: courtLayout.width, height: courtLayout.height,
+      }, courtStyleRef.current, now, quality);
+      context.strokeStyle = courtVisual.line;
       context.lineWidth = 2;
       context.strokeRect(courtLayout.left, courtLayout.top, courtLayout.width, courtLayout.height);
       const drawCourtLine = (startX: number, startY: number, endX: number, endY: number) => {
@@ -1897,7 +2108,7 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
       drawCourtLine(0, 0.5, 0.25, 0.5);
       drawCourtLine(0.75, 0.5, 1, 0.5);
 
-      context.strokeStyle = 'rgba(15,23,42,0.72)';
+      context.strokeStyle = courtVisual.net;
       context.lineWidth = 5;
       drawCourtLine(0.5, 0, 0.5, 1);
       context.strokeStyle = 'rgba(255,255,255,0.3)';
@@ -1920,6 +2131,30 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
       }
 
       const arena = activeArena;
+      const shuttlePosition = toScreen(arena.shuttle.x, arena.shuttle.y);
+      const flightProgress = clamp((now - arena.flightStartedAt) / arena.flightDuration, 0, 1);
+      const arcLift = getArcLiftPixels(flightProgress, arena.shotArcScale, courtLayout, portrait);
+      const shuttleHead = { x: shuttlePosition.x, y: shuttlePosition.y - arcLift };
+      const smashEffect = arena.shotType === 'smash' && arena.hitAt > 0
+        ? 1 - clamp((now - arena.hitAt) / 330, 0, 1)
+        : 0;
+      const trailStyle = trailStyleRef.current;
+      if (trailStyle !== 'classic' && phaseRef.current === 'playing' && now >= arena.flightStartedAt) {
+        const slideAt = arena.landingSlideStartedAt;
+        const slideDuration = arena.shotType === 'smash' || arena.shotType === 'net-kill'
+          ? GAME_CONFIG.landingSlide.smashDuration
+          : GAME_CONFIG.landingSlide.duration;
+        const fade = slideAt > 0 ? 1 - clamp((now - slideAt) / slideDuration, 0, 1) : 1;
+        const speed = Math.hypot(arena.shuttle.vx, arena.shuttle.vy) * fade * fade;
+        flightHistory.record(arena.flightStartedAt, now, shuttleHead.x, shuttleHead.y, toScreen(arena.flightStartX, arena.flightStartY));
+        if (fade > 0) {
+          const points = flightHistory.sample(now, getFlightTrailWindow(trailStyle, speed, smashEffect), shuttleHead);
+          const crowded = courtStyleRef.current !== 'classic' && shuttleStyleRef.current !== 'classic' && racketStyleRef.current !== 'classic';
+          drawFlightTrail(context, trailStyle, points, now, fade * (crowded ? 0.78 : 1), quality, speed, smashEffect, arena.flightStartedAt);
+        }
+      } else {
+        flightHistory.reset();
+      }
       const sustainedAiPressure = clamp(-arena.rallyPressure, 0, 1);
       const incomingPressure = arena.receiver === 'player' && arena.canBeHit
         ? clamp(
@@ -1938,28 +2173,29 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
       }
       const shotSpeedIntensity = clamp((1450 - arena.flightDuration) / 880, 0, 1);
       const timingWindows = getTimingWindows(arena.incomingShotQuality);
-      const powerTimingWindow = getPowerTimingWindow(arena.incomingShotQuality);
+      const powerTimingWindow = getPowerTimingWindow(arena.incomingShotQuality, matchDifficultyRef.current);
       const predictedOptimalHitTime = getPredictedOptimalHitTime(arena);
       const timingError = Math.abs(predictedOptimalHitTime - now);
       const baseTimingQuality: Exclude<HitQuality, 'none'> = timingError <= timingWindows.perfect
         ? 'perfect'
         : timingError <= timingWindows.normal ? 'normal' : 'bad';
-      const currentFlightProgress = clamp((now - arena.flightStartedAt) / arena.flightDuration, 0, 1);
       const defensivePerfectWindow = getDefensivePerfectWindow(arena.incomingShotQuality);
       const isDefensivePerfectMoment = isPreciseDefenseIncomingShot(arena)
         && timingError <= defensivePerfectWindow;
       const isPowerTimingMoment = !isPreciseDefenseIncomingShot(arena)
         && arena.rallyStrokeCount > 0
         && timingError <= powerTimingWindow;
-      const currentTimingQuality = isDefensivePerfectMoment ? 'normal' : baseTimingQuality;
+      const classicEmphasis = baseTimingQuality === 'perfect' || isDefensivePerfectMoment;
+      const emphasizeTiming = classicEmphasis || (trailStyle !== 'classic' && isPowerTimingMoment);
       const isPlayerIncomingFlight = arena.receiver === 'player'
         && arena.canBeHit
-        && currentFlightProgress < 1;
+        && flightProgress < 1;
 
-      if (phaseRef.current === 'playing' && isPlayerIncomingFlight) {
+      const drawLandingIndicator = () => {
+        if (phaseRef.current !== 'playing' || !isPlayerIncomingFlight) return;
         const landingCirclePosition = toScreen(arena.landingCircleX, arena.landingCircleY);
         const timingDistance = clamp(timingError / timingWindows.bad, 0, 1);
-        const perfectPulse = currentTimingQuality === 'perfect' || isDefensivePerfectMoment
+        const perfectPulse = emphasizeTiming
           ? (Math.sin(now / 42) + 1) * 2.2
           : 0;
         const indicatorScale = clamp(Math.min(courtLayout.width, courtLayout.height) / 320, 0.72, 1.15);
@@ -1969,94 +2205,48 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
             * (GAME_CONFIG.landingIndicator.maximumRadius - GAME_CONFIG.landingIndicator.minimumRadius)
             + perfectPulse
         ) * indicatorScale;
-        const timingColor = isDefensivePerfectMoment
-          ? '#7dd3fc'
-          : isPowerTimingMoment ? '#fb7185'
-          : currentTimingQuality === 'perfect' ? '#4ade80'
-          : currentTimingQuality === 'normal' ? '#fde047' : '#fb923c';
-        const timingFill = isDefensivePerfectMoment
-          ? 'rgba(186,230,253,0.2)'
-          : isPowerTimingMoment ? 'rgba(251,113,133,0.24)'
-          : currentTimingQuality === 'perfect' ? 'rgba(74,222,128,0.22)'
-          : currentTimingQuality === 'normal' ? 'rgba(253,224,71,0.16)' : 'rgba(251,146,60,0.12)';
-        context.save();
-        context.strokeStyle = timingColor;
-        context.fillStyle = timingFill;
-        context.lineWidth = currentTimingQuality === 'perfect' || isDefensivePerfectMoment ? 4 : 2.5;
-        context.setLineDash([7, 5]);
-        context.beginPath();
-        context.ellipse(
-          landingCirclePosition.x,
-          landingCirclePosition.y,
-          landingRadius * 1.15,
-          landingRadius * 0.72,
-          0,
-          0,
-          Math.PI * 2
-        );
-        context.fill();
-        context.stroke();
-        context.setLineDash([]);
-        context.fillStyle = timingColor;
-        context.beginPath();
-        context.arc(landingCirclePosition.x, landingCirclePosition.y, 3, 0, Math.PI * 2);
-        context.fill();
-        if (currentTimingQuality === 'perfect' || isDefensivePerfectMoment) {
-          context.globalAlpha = 0.45;
-          context.lineWidth = 2;
-          context.beginPath();
-          context.ellipse(
-            landingCirclePosition.x,
-            landingCirclePosition.y,
-            landingRadius * 1.15 + 7,
-            landingRadius * 0.72 + 5,
-            0,
-            0,
-            Math.PI * 2
-          );
-          context.stroke();
-        }
-        if (isDefensivePerfectMoment) {
-          context.globalAlpha = 0.95;
-          context.strokeStyle = '#f8fafc';
-          context.lineWidth = 2;
-          context.beginPath();
-          context.ellipse(
-            landingCirclePosition.x,
-            landingCirclePosition.y,
-            Math.max(landingRadius * 1.15 - 5, 5),
-            Math.max(landingRadius * 0.72 - 3, 4),
-            0,
-            0,
-            Math.PI * 2
-          );
-          context.stroke();
-        }
-        context.restore();
-      }
+        const state = isDefensivePerfectMoment ? 'defense'
+          : isPowerTimingMoment ? 'attack'
+          : baseTimingQuality === 'bad' ? 'outside' : baseTimingQuality;
+        drawTrailTimingTarget(context, trailStyle, {
+          center: landingCirclePosition,
+          radiusX: landingRadius * 1.15,
+          radiusY: landingRadius * 0.72,
+          focus: 1 - timingDistance,
+          state,
+          classicEmphasis,
+          now: effectNow,
+          quality,
+        });
+      };
+
+      if (trailStyle === 'classic') drawLandingIndicator();
 
       const playerPosition = toScreen(arena.playerX, arena.playerY);
       const cpuPosition = toScreen(arena.cpuX, arena.cpuY);
-      arena.dragSamples.forEach((sample) => {
-        const sampleAge = now - sample.at;
-        if (sampleAge < 0 || sampleAge > 120) return;
-        const trailPosition = toScreen(sample.courtX, sample.courtY);
-        const opacity = (1 - sampleAge / 120) * 0.28;
-        context.strokeStyle = `rgba(186,230,253,${opacity})`;
-        context.lineWidth = 2;
-        context.beginPath();
-        context.ellipse(
-          trailPosition.x,
-          trailPosition.y,
-          portrait ? courtLayout.width * 0.105 : 10,
-          portrait ? 10 : courtLayout.height * 0.105,
-          0,
-          0,
-          Math.PI * 2
-        );
-        context.stroke();
-      });
-      const playerRacketVisual = RACKET_VISUALS[racketStyleRef.current];
+      const racketStyle = racketStyleRef.current;
+      const playerRacketVisual = RACKET_VISUALS[racketStyle];
+      const racketRadiusX = portrait ? courtLayout.width * 0.105 : 10;
+      const racketRadiusY = portrait ? 10 : courtLayout.height * 0.105;
+      if (racketStyle === 'classic') {
+        // The classic racket leaves a short trace of its actual positions.
+        for (const sample of arena.dragSamples) {
+          const age = now - sample.at;
+          if (age < 0 || age > 120) continue;
+          const point = toScreen(sample.courtX, sample.courtY);
+          context.strokeStyle = `rgba(186,230,253,${(1 - age / 120) * 0.28})`;
+          context.lineWidth = 2;
+          context.beginPath();
+          context.ellipse(point.x, point.y, racketRadiusX, racketRadiusY, 0, 0, Math.PI * 2);
+          context.stroke();
+        }
+      } else if (phaseRef.current === 'playing') {
+        const { velocityX, velocityY } = getRacketMotion(now);
+        drawRacketMotion(context, racketStyle, playerPosition,
+          portrait ? velocityY * courtLayout.width : velocityX * courtLayout.width,
+          portrait ? -velocityX * courtLayout.height : velocityY * courtLayout.height,
+          now, quality);
+      }
       drawRacket(
         context,
         playerPosition.x,
@@ -2067,46 +2257,15 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
         playerRacketVisual.fill,
         playerRacketVisual.glow,
         true,
-        portrait
+        portrait,
+        quality,
       );
-      if (playerRacketVisual.effectLevel > 0) {
-        const racketRadiusX = portrait ? courtLayout.width * 0.105 : 10;
-        const racketRadiusY = portrait ? 10 : courtLayout.height * 0.105;
-        const effectPulse = (Math.sin(now / (150 - playerRacketVisual.effectLevel * 20)) + 1) / 2;
+      if (racketStyle !== 'classic') {
         context.save();
         context.translate(playerPosition.x, playerPosition.y);
-        context.strokeStyle = playerRacketVisual.frame;
         context.shadowColor = playerRacketVisual.glow;
-        context.shadowBlur = 8 + playerRacketVisual.effectLevel * 5;
-        context.globalAlpha = 0.16 + effectPulse * 0.16;
-        context.lineWidth = 1.5 + playerRacketVisual.effectLevel * 0.45;
-        context.beginPath();
-        context.ellipse(0, 0, racketRadiusX + 4 + effectPulse * 3, racketRadiusY + 4 + effectPulse * 3, 0, 0, Math.PI * 2);
-        context.stroke();
-
-        if (playerRacketVisual.effectLevel >= 2) {
-          const particleCount = playerRacketVisual.effectLevel === 3 ? 8 : 4;
-          for (let index = 0; index < particleCount; index += 1) {
-            const angle = now / (680 - playerRacketVisual.effectLevel * 80) + (Math.PI * 2 * index) / particleCount;
-            const orbitX = Math.cos(angle) * (racketRadiusX + 8 + effectPulse * 3);
-            const orbitY = Math.sin(angle) * (racketRadiusY + 8 + effectPulse * 3);
-            context.globalAlpha = 0.55 + (index % 2) * 0.25;
-            context.fillStyle = playerRacketVisual.effectLevel === 3 && index % 2 ? '#fff7c2' : playerRacketVisual.frame;
-            context.beginPath();
-            context.arc(orbitX, orbitY, playerRacketVisual.effectLevel === 3 ? 2.2 : 1.7, 0, Math.PI * 2);
-            context.fill();
-            if (playerRacketVisual.effectLevel === 3 && index % 2 === 0) {
-              context.strokeStyle = '#fff7c2';
-              context.lineWidth = 1;
-              context.beginPath();
-              context.moveTo(orbitX - 3.5, orbitY);
-              context.lineTo(orbitX + 3.5, orbitY);
-              context.moveTo(orbitX, orbitY - 3.5);
-              context.lineTo(orbitX, orbitY + 3.5);
-              context.stroke();
-            }
-          }
-        }
+        context.shadowBlur = 4;
+        drawRacketAccent(context, racketStyle, racketRadiusX, racketRadiusY, now, quality);
         context.restore();
       }
       drawRacket(
@@ -2119,7 +2278,8 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
         'rgba(253,164,175,0.08)',
         'rgba(253,164,175,0.45)',
         false,
-        portrait
+        portrait,
+        quality,
       );
 
       const trailRgb = arena.shotWasPowerTiming
@@ -2128,59 +2288,17 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
          : arena.lastHitPerfect && arena.receiver === 'cpu' ? '110,231,183'
          : arena.lastShotQuality === 'perfect' ? '74,222,128'
          : arena.lastShotQuality === 'normal' ? '253,224,71' : '251,146,60';
-      const qualityTrailScale = arena.lastShotQuality === 'perfect'
-        ? 1.25
-        : arena.lastShotQuality === 'bad' ? 0.62 : 1;
-      arena.trail.forEach((point, index) => {
-        const opacity = ((index + 1) / arena.trail.length)
-          * (0.13 + shotSpeedIntensity * 0.3)
-          * qualityTrailScale;
-        const pointPosition = toScreen(point.x, point.y);
-        context.fillStyle = `rgba(${trailRgb},${opacity})`;
-        context.beginPath();
-        context.arc(
-          pointPosition.x,
-          pointPosition.y,
-          (1.5 + index * (0.18 + shotSpeedIntensity * 0.16)) * qualityTrailScale,
-          0,
-          Math.PI * 2
-        );
-        context.fill();
-      });
-
-      const shuttleVisual = SHUTTLE_VISUALS[shuttleStyleRef.current];
-      if (shuttleVisual.effectLevel > 0 && arena.trail.length > 1) {
-        context.save();
-        context.shadowColor = shuttleVisual.glow;
-        context.shadowBlur = 5 + shuttleVisual.effectLevel * 4;
-        if (shuttleVisual.effectLevel === 3) {
-          context.strokeStyle = `rgba(${shuttleVisual.trailRgb},0.42)`;
-          context.lineWidth = 2.4;
+      if (trailStyle === 'classic') {
+        const qualityScale = arena.lastShotQuality === 'perfect' ? 1.25 : arena.lastShotQuality === 'bad' ? 0.62 : 1;
+        arena.classicTrail.forEach((point, index, points) => {
+          const position = toScreen(point.x, point.y);
+          const alpha = ((index + 1) / points.length) * (0.13 + shotSpeedIntensity * 0.3) * qualityScale;
+          context.fillStyle = `rgba(${trailRgb},${alpha})`;
           context.beginPath();
-          arena.trail.forEach((point, index) => {
-            const pointPosition = toScreen(point.x, point.y);
-            if (index === 0) context.moveTo(pointPosition.x, pointPosition.y);
-            else context.lineTo(pointPosition.x, pointPosition.y);
-          });
-          context.stroke();
-        }
-        arena.trail.forEach((point, index) => {
-          if (index % Math.max(1, 4 - shuttleVisual.effectLevel) !== 0) return;
-          const pointPosition = toScreen(point.x, point.y);
-          const opacity = ((index + 1) / arena.trail.length) * (0.12 + shuttleVisual.effectLevel * 0.1);
-          context.fillStyle = shuttleVisual.effectLevel === 3 && index % 2
-            ? `rgba(232,121,249,${opacity})`
-            : `rgba(${shuttleVisual.trailRgb},${opacity})`;
-          context.beginPath();
-          context.arc(pointPosition.x, pointPosition.y, 1.5 + shuttleVisual.effectLevel * 0.8, 0, Math.PI * 2);
+          context.arc(position.x, position.y, (1.5 + index * (0.18 + shotSpeedIntensity * 0.16)) * qualityScale, 0, Math.PI * 2);
           context.fill();
         });
-        context.restore();
       }
-
-      const shuttlePosition = toScreen(arena.shuttle.x, arena.shuttle.y);
-      const flightProgress = clamp((now - arena.flightStartedAt) / arena.flightDuration, 0, 1);
-      const arcLift = getArcLiftPixels(flightProgress, arena.shotArcScale, courtLayout, portrait);
       context.save();
       context.fillStyle = `rgba(15,23,42,${0.16 + flightProgress * 0.1})`;
       context.beginPath();
@@ -2228,11 +2346,10 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
         context.arc(shuttlePosition.x, shuttlePosition.y - arcLift, glowRadius, 0, Math.PI * 2);
         context.fill();
       }
-      drawShuttle(context, shuttlePosition.x, shuttlePosition.y - arcLift, shuttleAngle);
-
+      drawShuttle(context, shuttleHead.x, shuttleHead.y, shuttleAngle, now, quality, smashEffect);
       const hitAge = now - arena.hitAt;
       const hitEffectDuration = arena.lastHitPerfect || arena.lastHitDefensivePerfect || arena.lastHitSmash ? 560 : 260;
-      if (hitAge >= 0 && hitAge < hitEffectDuration) {
+      if (arena.hitAt > 0 && hitAge >= 0 && hitAge < hitEffectDuration) {
         const progress = hitAge / hitEffectDuration;
         const hitPosition = toScreen(arena.hitX, arena.hitY);
         const hitEffectRgb = arena.lastHitSmash
@@ -2249,6 +2366,12 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
         context.stroke();
       }
 
+      effects.drawObjects(context, {
+        racket: racketStyleRef.current, shuttle: shuttleStyleRef.current,
+        court: courtStyleRef.current, trail: trailStyleRef.current,
+      }, toScreen, now, quality);
+
+      if (trailStyle !== 'classic') drawLandingIndicator();
       context.font = '700 12px system-ui, sans-serif';
       if (portrait) {
         context.textAlign = 'left';
@@ -2266,12 +2389,154 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
       }
     };
 
-    const loop = (now: number) => {
+    const demoMotion: DragSample[] = [
+      { at: 0, courtX: 0.2, courtY: 0.5 },
+      { at: 0, courtX: 0.2, courtY: 0.5 },
+    ];
+
+    const resetTryoutStage = (trial: TryoutState, stageNumber: number) => {
+      trial.stageNumber = stageNumber;
+      trial.playedEvent = false;
+      effects.reset();
+      flightHistory.reset();
+      arenaRef.current.classicTrail.length = 0;
+      arenaRef.current.hitAt = 0;
+      setPlayerScore(0);
+      setCpuScore(0);
+    };
+
+    const playTimingTryoutFrame = (now: number, trial: TryoutState) => {
       const arena = arenaRef.current;
-      const delta = arena.lastTime ? now - arena.lastTime : 16.67;
-      arena.lastTime = now;
-      update(now, delta);
-      draw(now);
+      const cycleDuration = 1880;
+      const cycle = Math.floor(Math.max(0, now - trial.startedAt) / cycleDuration);
+      const start = trial.startedAt + cycle * cycleDuration;
+      if (trial.stageNumber !== cycle) resetTryoutStage(trial, cycle);
+
+      arena.flightStartedAt = start + 110;
+      arena.flightDuration = 1050;
+      arena.flightStartX = 0.84;
+      arena.flightStartY = 0.32;
+      arena.landingX = 0.33;
+      arena.landingY = 0.62;
+      arena.landingCircleX = arena.landingX;
+      arena.landingCircleY = arena.landingY;
+      arena.landingSlideStartedAt = 0;
+      arena.receiver = 'player';
+      arena.incomingShotQuality = 0.5;
+      arena.shotWasPowerTiming = cycle % 3 === 2;
+      arena.rallyStrokeCount = cycle % 3 === 0 ? 0 : 2;
+      arena.shotType = arena.shotWasPowerTiming ? 'smash' : 'drive';
+      arena.shotArcScale = 0.64;
+      arena.waitingForServe = false;
+      arena.shakeUntil = 0;
+      arena.rallyPressure = 0;
+      arena.dragSamples = [];
+      arena.playerX = 0.16;
+      arena.playerY = 0.36;
+      arena.cpuX = 0.87;
+      arena.cpuY = 0.32;
+
+      // Hold the timing window briefly in the demo so its colors can be compared.
+      const optimal = getPredictedOptimalHitTime(arena);
+      const playhead = Math.min(now, optimal) + Math.max(0, now - optimal - 500);
+      const progress = clamp((playhead - arena.flightStartedAt) / arena.flightDuration, 0, 1);
+      arena.canBeHit = playhead >= arena.flightStartedAt && progress < 1;
+      arena.shuttle.x = lerp(arena.flightStartX, arena.landingX, progress);
+      arena.shuttle.y = lerp(arena.flightStartY, arena.landingY, progress);
+      arena.shuttle.vx = progress < 1 ? (arena.landingX - arena.flightStartX) / 1.05 : 0;
+      arena.shuttle.vy = progress < 1 ? (arena.landingY - arena.flightStartY) / 1.05 : 0;
+      if (arena.canBeHit && playhead !== optimal) sampleClassicTrail(arena);
+      return playhead;
+    };
+
+    const playTryoutFrame = (now: number, trial: TryoutState, mode: Exclude<TrialMode, 'free' | 'timing'>) => {
+      const arena = arenaRef.current;
+      const elapsed = Math.max(0, now - trial.startedAt);
+      const stageNumber = Math.floor(elapsed / TRIAL_STAGE_LENGTH);
+      const stageStart = trial.startedAt + stageNumber * TRIAL_STAGE_LENGTH;
+      const age = elapsed % TRIAL_STAGE_LENGTH;
+      const stage = mode === 'auto' ? AUTO_TRIAL_STAGES[stageNumber % (trial.hasVictory ? 5 : 4)] : mode;
+      if (stageNumber !== trial.stageNumber) {
+        resetTryoutStage(trial, stageNumber);
+        setTrialStage(stage);
+      }
+
+      // Each stage runs on the normal court with a repeatable flight for comparison.
+      const launchAge = stage === 'score' ? 90 : stage === 'move' ? 130 : TRIAL_EVENT_AT;
+      const duration = stage === 'smash' ? 395 : stage === 'score' ? TRIAL_EVENT_AT - launchAge : 780;
+      const progress = stage === 'win' ? 0 : clamp((age - launchAge) / duration, 0, 1);
+      arena.shakeUntil = 0;
+      arena.lastShotQuality = stage === 'smash' ? 'perfect' : 'normal';
+      arena.lastHitPerfect = stage === 'smash';
+      arena.lastHitDefensivePerfect = false;
+      arena.lastHitSmash = stage === 'smash';
+      arena.shotWasPowerTiming = stage === 'smash';
+      arena.shotType = stage === 'smash' ? 'smash' : 'drive';
+      arena.shotArcScale = stage === 'smash' ? 0.24 : 0.64;
+      arena.rallyPressure = 0;
+      arena.flightStartX = 0.23;
+      arena.flightStartY = 0.32;
+      arena.landingX = 0.82;
+      arena.landingY = 0.67;
+      arena.flightStartedAt = age >= launchAge && stage !== 'win' ? stageStart + launchAge : Infinity;
+      arena.flightDuration = duration;
+      arena.shuttle.x = lerp(arena.flightStartX, arena.landingX, progress);
+      arena.shuttle.y = lerp(arena.flightStartY, arena.landingY, progress);
+      arena.shuttle.vx = progress < 1 ? (arena.landingX - arena.flightStartX) / (duration / 1000) : 0;
+      arena.shuttle.vy = progress < 1 ? (arena.landingY - arena.flightStartY) / (duration / 1000) : 0;
+      arena.landingSlideStartedAt = progress === 1 ? arena.flightStartedAt + duration : 0;
+      if (progress > 0 && progress < 1) sampleClassicTrail(arena);
+      arena.canBeHit = false;
+      arena.waitingForServe = false;
+      arena.receiver = 'cpu';
+      arena.cpuX = 0.86;
+      arena.cpuY = 0.67;
+
+      const racketX = (t: number) => stage === 'move' ? 0.21 + Math.sin(t / 210) * 0.055 : 0.23;
+      const racketY = (t: number) => stage === 'move'
+        ? 0.48 + Math.sin(t / 225 - 0.5) * 0.25
+        : lerp(0.52, 0.32, t / TRIAL_EVENT_AT);
+      arena.playerX = racketX(age);
+      arena.playerY = racketY(age);
+      demoMotion[0].at = now - 24;
+      demoMotion[0].courtX = racketX(age - 24);
+      demoMotion[0].courtY = racketY(age - 24);
+      demoMotion[1].at = now;
+      demoMotion[1].courtX = arena.playerX;
+      demoMotion[1].courtY = arena.playerY;
+      arena.dragSamples = demoMotion;
+
+      if (!trial.playedEvent && stage !== 'move' && age >= TRIAL_EVENT_AT) {
+        trial.playedEvent = true;
+        const eventAt = stageStart + TRIAL_EVENT_AT;
+        const score = stage === 'score' || stage === 'win';
+        const x = score ? arena.landingX : arena.flightStartX;
+        const y = score ? arena.landingY : arena.flightStartY;
+        effects.emit(stage, eventAt, x, y, true, arena.shuttle.vx, arena.shuttle.vy);
+        if (score) {
+          setPlayerScore(stage === 'win' ? 3 : 1);
+        } else {
+          arena.hitAt = eventAt;
+          arena.hitX = x;
+          arena.hitY = y;
+        }
+      }
+    };
+
+    const loop = (now: number) => {
+      if (phaseRef.current !== 'ready') {
+        const arena = arenaRef.current;
+        const delta = arena.lastTime ? now - arena.lastTime : 16.67;
+        arena.lastTime = now;
+        const trial = trialRef.current;
+        if (trial?.mode === 'timing') {
+          draw(playTimingTryoutFrame(now, trial), now);
+        } else {
+          if (trial && trial.mode !== 'free') playTryoutFrame(now, trial, trial.mode);
+          else update(now, delta);
+          draw(now);
+        }
+      }
       frameRef.current = window.requestAnimationFrame(loop);
     };
 
@@ -2285,36 +2550,55 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
     };
   }, []);
 
-  const getPointerCourtPosition = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const portrait = GAME_CONFIG.court.forcePortrait || rect.height >= rect.width;
-    const courtLayout = getCourtLayout(rect.width, rect.height, portrait);
-    const localX = event.clientX - rect.left;
-    const localY = event.clientY - rect.top;
-    const pointerX = clamp((localX - courtLayout.left) / courtLayout.width, 0, 1);
-    const pointerY = clamp((localY - courtLayout.top) / courtLayout.height, 0, 1);
-    return {
-      courtX: clamp(portrait ? 1 - pointerY : pointerX, 0.055, GAME_CONFIG.playerCourtLimit),
-      courtY: clamp(portrait ? pointerX : pointerY, 0.08, 0.92),
-    };
-  };
-
   const movePlayerToPointer = (event: React.PointerEvent<HTMLCanvasElement>) => {
     if (phaseRef.current !== 'playing') return;
-    const { courtX, courtY } = getPointerCourtPosition(event);
+    if (trialRef.current && trialRef.current.mode !== 'free') return;
+    const touch = event.pointerType === 'touch' ? activeTouchRef.current : null;
+    if (event.pointerType === 'touch' && touch?.pointerId !== event.pointerId) return;
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const portrait = GAME_CONFIG.court.forcePortrait || rect.height >= rect.width;
+    const layout = getCourtLayout(rect.width, rect.height, portrait);
+    const nativeEvent = event.nativeEvent;
+    const coalesced = touch ? nativeEvent.getCoalescedEvents?.() : undefined;
+    const points = coalesced?.length ? coalesced : [nativeEvent];
     const now = performance.now();
     const arena = arenaRef.current;
 
-    arena.playerX = courtX;
-    arena.playerY = courtY;
-    arena.dragSamples.push({ at: now, courtX, courtY });
+    for (const point of points) {
+      const pointerX = (point.clientX - rect.left - layout.left) / layout.width;
+      const pointerY = (point.clientY - rect.top - layout.top) / layout.height;
+      const at = touch && point.timeStamp > 0 && point.timeStamp <= now
+        ? Math.max(point.timeStamp, touch.sample?.at ?? 0)
+        : now;
+      const sample = {
+        at,
+        courtX: clamp(portrait ? 1 - pointerY : pointerX, 0.055, GAME_CONFIG.playerCourtLimit),
+        courtY: clamp(portrait ? pointerX : pointerY, 0.08, 0.92),
+      };
+      if (touch) {
+        if (touch.sample) touchSweepsRef.current.push({ from: touch.sample, to: sample });
+        touch.sample = sample;
+      }
+      arena.playerX = sample.courtX;
+      arena.playerY = sample.courtY;
+      arena.dragSamples.push(sample);
+    }
     const oldestSampleAt = now - GAME_CONFIG.input.velocitySampleMs * 1.6;
     arena.dragSamples = arena.dragSamples.filter((sample) => sample.at >= oldestSampleAt);
   };
 
   const handleCourtPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
     if (phaseRef.current !== 'playing') return;
+    if (trialRef.current && trialRef.current.mode !== 'free') return;
     const arena = arenaRef.current;
+    const isTouch = event.pointerType === 'touch';
+    if (isTouch) {
+      if (activeTouchRef.current) return;
+      activeTouchRef.current = { pointerId: event.pointerId, sample: null };
+      event.currentTarget.setPointerCapture(event.pointerId);
+      arena.dragSamples = [];
+    }
 
     if (arena.waitingForServe) {
       const now = performance.now();
@@ -2324,22 +2608,34 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
       arena.canBeHit = arena.receiver === 'player';
       arena.dragSamples = [];
       setWaitingForServe(false);
-      return;
+      if (!isTouch) return;
     }
 
     movePlayerToPointer(event);
+  };
+
+  const endCourtTouch = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (activeTouchRef.current?.pointerId !== event.pointerId) return;
+    if (event.type === 'pointerup') movePlayerToPointer(event);
+    activeTouchRef.current = null;
   };
 
   return (
     <div className="fixed inset-0 z-[90] bg-slate-950" role="dialog" aria-modal="true" aria-label="羽球電腦對戰">
       <div className="shuttle-game-modal relative h-full w-full overflow-hidden bg-slate-950 text-white">
         <div className={`flex h-full flex-col ${phase === 'ready' ? 'invisible' : ''}`}>
+          {trialItem && (
+            <GameCosmeticTryout item={trialItem} mode={trialMode} stage={trialStage}
+              onMode={mode => startTryout(trialItem, mode)} onBack={leaveTryout} />
+          )}
           <div className="shrink-0 grid grid-cols-3 items-center border-b border-white/10 bg-slate-950 px-4 py-2">
             <div className="flex items-center gap-2 text-sky-300">
               <span className="text-xs font-black">你</span>
               <span className="text-2xl font-black tabular-nums text-white">{playerScore}</span>
             </div>
-            <div className="text-center text-[10px] font-bold tracking-wider text-slate-500">先到 3 分</div>
+            <div className="text-center text-[10px] font-bold tracking-wider text-slate-400">
+              {trialItem ? '試用・不計戰績' : `${difficultyLabel}・先到 3 分`}
+            </div>
             <div className="flex items-center justify-end gap-2 text-rose-300">
               <span className="text-2xl font-black tabular-nums text-white">{cpuScore}</span>
               <span className="text-xs font-black">電腦</span>
@@ -2351,15 +2647,20 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
               ref={canvasRef}
               onPointerDown={handleCourtPointerDown}
               onPointerMove={movePlayerToPointer}
+              onPointerUp={endCourtTouch}
+              onPointerCancel={endCourtTouch}
+              onLostPointerCapture={endCourtTouch}
               className="h-full w-full touch-none cursor-crosshair"
               aria-label="羽球對戰球場；滑鼠游標或手指位置就是球拍，讓球拍直接碰到羽球完成擊球"
             />
 
-            <div className="absolute right-3 top-3 z-20">
-              <button type="button" onClick={onClose} className="rounded-md bg-slate-950/55 p-2 text-slate-300 transition-colors hover:bg-slate-950/80 hover:text-white" aria-label="關閉遊戲">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
+            {!trialItem && (
+              <div className="absolute right-3 top-3 z-20">
+                <button type="button" onClick={onClose} className="rounded-md bg-slate-950/55 p-2 text-slate-300 transition-colors hover:bg-slate-950/80 hover:text-white" aria-label="關閉遊戲">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            )}
 
             {phase === 'playing' && waitingForServe && (
               <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
@@ -2368,68 +2669,103 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
             )}
 
             {phase === 'finished' && (
-              <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/65 p-5 backdrop-blur-[2px]">
+              <div className={`absolute inset-0 z-20 flex items-center justify-center p-5 ${winner === 'player' && (equippedCourtStyle === 'space' || equippedRacketStyle === 'galaxy') ? 'bg-slate-950/35' : 'bg-slate-950/65 backdrop-blur-[2px]'}`}>
                 <div className="flex w-full max-w-xs flex-col items-center text-center">
                   <Trophy className={`h-8 w-8 ${winner === 'player' ? 'text-amber-300' : 'text-slate-400'}`} />
-                  <h2 className="mt-3 text-3xl font-black">{winner === 'player' ? '你贏了！' : '電腦獲勝'}</h2>
+                  <h2 className="mt-3 text-3xl font-black">{trialItem ? '試玩結束' : winner === 'player' ? '你贏了！' : '電腦獲勝'}</h2>
                   <p className="mt-2 text-sm text-slate-300">
-                    最終比分 <span className="ml-1 font-black tabular-nums text-white">{playerScore}：{cpuScore}</span>
+                    {difficultyLabel}模式・最終比分 <span className="ml-1 font-black tabular-nums text-white">{playerScore}：{cpuScore}</span>
                   </p>
+                  {!trialItem && winner === 'player' && !resultSaveError && (
+                    <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-amber-300/15 px-3 py-1.5 text-sm font-bold text-amber-200">
+                      <Coins aria-hidden="true" className="h-4 w-4" />
+                      勝場獎勵 +{WIN_REWARD_COINS[matchDifficultyRef.current]} 枚金幣
+                    </p>
+                  )}
+                  {resultSaveError && <p role="alert" className="mt-3 text-xs text-rose-300">{resultSaveError}</p>}
                   <div className="mt-6 flex w-full max-w-xs gap-2">
-                    <button type="button" onClick={onClose} className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-white/15 bg-slate-950/55 px-5 py-3.5 text-sm font-black text-white transition-colors hover:bg-white/10 active:scale-95">
+                    <button type="button" onClick={trialItem ? leaveTryout : onClose} className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-white/15 bg-slate-950/55 px-5 py-3.5 text-sm font-black text-white transition-colors hover:bg-white/10 active:scale-95">
                       <X className="h-4 w-4" />
-                      <span>退出遊戲</span>
+                      <span>{trialItem ? '回商店' : '退出遊戲'}</span>
                     </button>
                     <button type="button" onClick={startGame} className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-400 px-5 py-3.5 text-sm font-black text-slate-950 transition-colors hover:bg-emerald-300 active:scale-95">
                       <RotateCcw className="h-4 w-4" />
                       <span>再戰一場</span>
                     </button>
                   </div>
+                  {!trialItem && (
+                    <div className="mt-2 grid w-full grid-cols-2 gap-2">
+                      <button type="button" onClick={() => {
+                        phaseRef.current = 'ready';
+                        setPhase('ready');
+                      }} className="min-h-11 rounded-xl border border-white/15 bg-slate-950/55 text-sm font-bold text-slate-300 hover:bg-white/10 hover:text-white">
+                        切換難度
+                      </button>
+                      <button type="button" onClick={() => {
+                        setIsShopOpen(true);
+                        phaseRef.current = 'ready';
+                        setPhase('ready');
+                      }} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/15 bg-slate-950/55 text-sm font-bold text-white hover:bg-white/10">
+                        <ShoppingBag aria-hidden="true" className="h-4 w-4 text-amber-300" />
+                        換造型
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
           </div>
         </div>
 
-        {phase === 'ready' && (
-          <div className="absolute inset-0 z-30 overflow-y-auto bg-slate-950 px-4 py-6 sm:px-6">
-            <button type="button" onClick={onClose} className="fixed right-4 top-4 z-10 rounded-xl bg-slate-950/80 p-2.5 text-slate-400 backdrop-blur transition-colors hover:bg-white/10 hover:text-white" aria-label="關閉遊戲">
+        {phase === 'ready' && (isShopOpen ? (
+          <div className="absolute inset-0 z-30">
+            <GameCosmeticsShop onBack={() => setIsShopOpen(false)} onClose={onClose}
+              initialCategory={shopCategory} onTry={item => startTryout(item, item.category === 'trail' ? 'timing' : 'move')} />
+          </div>
+        ) : (
+          <div className="absolute inset-0 z-30 bg-slate-950">
+            <GameIntroBackground />
+            <button type="button" onClick={onClose} className="absolute right-4 top-4 z-10 grid size-11 place-items-center rounded-full bg-slate-950/75 text-slate-200 transition-colors hover:bg-slate-900 focus-visible:outline-2 focus-visible:outline-emerald-400" aria-label="關閉遊戲">
               <X className="h-5 w-5" />
             </button>
-            <div className="mx-auto flex min-h-full w-full max-w-4xl items-center justify-center py-7">
-              {isShopOpen ? (
-                <GameCosmeticsShop onBack={() => setIsShopOpen(false)} />
-              ) : (
-                <section className="mx-auto w-full max-w-md rounded-3xl border border-white/10 bg-white/[0.035] px-5 py-7 text-center sm:px-7">
-                  <Gamepad2 className="mx-auto h-7 w-7 text-emerald-400" />
-                  <h1 className="mt-3 text-2xl font-black">羽球電腦對戰</h1>
-                  <p className="mx-auto mt-2 max-w-xs text-sm leading-6 text-slate-300">移動游標或手指揮動球拍，在落點圈縮到中心時碰到羽球。</p>
+            <div className="relative h-full overflow-y-auto overscroll-contain">
+              <div className="mx-auto flex min-h-full w-full max-w-5xl items-center justify-center px-4 py-[max(4.5rem,env(safe-area-inset-top),env(safe-area-inset-bottom))] sm:px-6">
+                  <section className="w-full max-w-xs [text-shadow:0_1px_3px_#020617]">
+                    <div className="flex items-center justify-center gap-2.5">
+                      <Gamepad2 aria-hidden="true" className="h-6 w-6 text-emerald-400" />
+                      <h1 className="text-2xl font-black">羽球對戰</h1>
+                    </div>
+                    <div className="mt-4 grid grid-cols-2 gap-2" role="group" aria-label="選擇遊戲難度">
+                      {GAME_DIFFICULTIES.map(({ value, label }) => (
+                        <button
+                          key={value}
+                          type="button"
+                          aria-pressed={difficulty === value}
+                          onClick={() => setDifficulty(value)}
+                          className={`min-h-11 rounded-xl border px-2 text-sm font-black text-white transition-colors focus-visible:outline-2 focus-visible:outline-white ${difficulty === value
+                            ? 'border-emerald-300 bg-emerald-950/50'
+                            : 'border-white/35 bg-slate-950/30 hover:bg-slate-950/50'}`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
 
-                  <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs font-bold">
-                    <span className="flex items-center gap-1.5 text-orange-300"><i className="h-2.5 w-2.5 rounded-full bg-orange-400" />橘・差</span>
-                    <span className="flex items-center gap-1.5 text-yellow-200"><i className="h-2.5 w-2.5 rounded-full bg-yellow-300" />黃・普通</span>
-                    <span className="flex items-center gap-1.5 text-emerald-300"><i className="h-2.5 w-2.5 rounded-full bg-emerald-400" />綠・好</span>
-                  </div>
-
-                  <div className="mx-auto mt-4 w-fit space-y-1.5 text-left text-xs text-slate-300">
-                    <div className="flex items-center gap-2"><i className="h-2.5 w-2.5 shrink-0 rounded-full bg-rose-400" /><span><strong className="text-rose-300">紅圈</strong>：快揮爆殺，慢揮快速近網球</span></div>
-                    <div className="flex items-center gap-2"><i className="h-2.5 w-2.5 shrink-0 rounded-full bg-sky-200 shadow-[0_0_6px_rgba(186,230,253,0.8)]" /><span><strong className="text-sky-200">藍白圈</strong>：接爆殺時的精準防守</span></div>
-                  </div>
-
-                  <button type="button" onClick={startGame} className="mt-7 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-400 px-8 py-3.5 text-sm font-black text-slate-950 transition-colors hover:bg-emerald-300 active:scale-95 sm:w-auto">
-                    <Zap className="h-5 w-5 fill-current" />
-                    <span>開始遊戲</span>
-                  </button>
-
-                  <button type="button" onClick={() => setIsShopOpen(true)} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-slate-900 px-8 py-3.5 text-sm font-black text-white transition-colors hover:border-white/20 hover:bg-slate-800 active:scale-95 sm:w-auto">
-                    <ShoppingBag className="h-4 w-4 text-amber-300" />
-                    <span>裝備商店</span>
-                  </button>
-                </section>
-              )}
+                    <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                      <button type="button" onClick={startGame} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-emerald-300/75 bg-emerald-950/55 px-3 text-sm font-black text-white transition-colors hover:bg-emerald-950/80 focus-visible:outline-2 focus-visible:outline-white active:scale-95">
+                        <Zap className="h-5 w-5 fill-current text-emerald-300" />
+                        <span>開始遊戲</span>
+                      </button>
+                      <button type="button" onClick={() => setIsShopOpen(true)} className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-white/35 bg-slate-950/30 px-3 text-xs font-bold text-white transition-colors hover:bg-slate-950/50 focus-visible:outline-2 focus-visible:outline-white">
+                        <ShoppingBag className="h-4 w-4 text-amber-300" />
+                        <span>裝備商店</span>
+                      </button>
+                    </div>
+                  </section>
+              </div>
             </div>
           </div>
-        )}
+        ))}
 
       </div>
     </div>

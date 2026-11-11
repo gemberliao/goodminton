@@ -17,6 +17,7 @@ import {
   MatchLineupConfig,
   ShuttleGameResult,
   ShuttleGameResultType,
+  ShuttleGameDifficulty,
   CoinWallet,
   ShopPurchase,
   GameLoadout
@@ -379,7 +380,10 @@ async function syncMatchLineupDelete(eventId: string): Promise<SyncResult> {
 async function syncGameResultInsert(result: ShuttleGameResult): Promise<SyncResult> {
   if (!getSupabaseConfig().isConfigured) return { success: true };
   try {
-    const { error } = await supabase.from('game_results').insert([result]);
+    const { difficulty, ...originalFields } = result;
+    // 困難是資料庫預設值，也可寫入尚未套用難度欄位的舊版資料庫。
+    const payload = difficulty === 'easy' ? { ...originalFields, difficulty } : originalFields;
+    const { error } = await supabase.from('game_results').insert(payload);
     return error ? reportSupabaseError('遊戲戰績寫入', error) : { success: true };
   } catch (error: unknown) {
     return reportSupabaseError('遊戲戰績寫入', error);
@@ -441,7 +445,8 @@ interface AppState {
   recordGameResult: (
     result: ShuttleGameResultType,
     playerScore: number,
-    cpuScore: number
+    cpuScore: number,
+    difficulty: ShuttleGameDifficulty
   ) => Promise<SyncResult>;
   buyShopItem: (itemId: string) => Promise<SyncResult>;
   equipGameItem: (itemId: string) => Promise<SyncResult>;
@@ -890,7 +895,7 @@ export const useAppStore = create<AppState>()(
         return sync;
       },
 
-      recordGameResult: async (result, playerScore, cpuScore) => {
+      recordGameResult: async (result, playerScore, cpuScore, difficulty) => {
         const userId = get().currentUser.id;
         if (!userId) return { success: false, message: '找不到目前玩家。' };
 
@@ -898,14 +903,16 @@ export const useAppStore = create<AppState>()(
           id: generateUUID(),
           user_id: userId,
           result,
+          difficulty,
           player_score: playerScore,
           cpu_score: cpuScore,
           played_at: new Date().toISOString()
         };
-        const previousResults = get().gameResults;
-        set({ gameResults: [completedGame, ...previousResults] });
+        set((state) => ({ gameResults: [completedGame, ...state.gameResults] }));
         const sync = await syncGameResultInsert(completedGame);
-        if (!sync.success) set({ gameResults: previousResults });
+        if (!sync.success) set((state) => ({
+          gameResults: state.gameResults.filter((game) => game.id !== completedGame.id)
+        }));
         else await get().fetchFromSupabase();
         return sync;
       },

@@ -1,6 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Gamepad2, ShieldCheck, Target, Trophy, X } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
+import type { ShuttleGameDifficulty } from '../../types';
+
+const difficultyFilters = [
+  { value: 'all', label: '全部' },
+  { value: 'easy', label: '簡單' },
+  { value: 'hard', label: '困難' },
+] as const;
 
 interface AdminGameStatsModalProps {
   onClose: () => void;
@@ -8,10 +15,14 @@ interface AdminGameStatsModalProps {
 
 export const AdminGameStatsModal: React.FC<AdminGameStatsModalProps> = ({ onClose }) => {
   const { gameResults, profiles } = useAppStore();
+  const [difficulty, setDifficulty] = useState<ShuttleGameDifficulty | 'all'>('all');
+  const filteredResults = difficulty === 'all'
+    ? gameResults
+    : gameResults.filter((result) => (result.difficulty ?? 'hard') === difficulty);
 
   const playerStats = profiles
     .map((profile) => {
-      const results = gameResults.filter((result) => result.user_id === profile.id);
+      const results = filteredResults.filter((result) => result.user_id === profile.id);
       const wins = results.filter((result) => result.result === 'win').length;
       const losses = results.filter((result) => result.result === 'loss').length;
       return {
@@ -26,8 +37,8 @@ export const AdminGameStatsModal: React.FC<AdminGameStatsModalProps> = ({ onClos
     .filter((stats) => stats.games > 0)
     .sort((a, b) => b.games - a.games || b.wins - a.wins || a.profile.name.localeCompare(b.profile.name, 'zh-Hant'));
 
-  const totalGames = gameResults.length;
-  const totalWins = gameResults.filter((result) => result.result === 'win').length;
+  const totalGames = filteredResults.length;
+  const totalWins = filteredResults.filter((result) => result.result === 'win').length;
   const totalLosses = totalGames - totalWins;
 
   return (
@@ -48,6 +59,21 @@ export const AdminGameStatsModal: React.FC<AdminGameStatsModalProps> = ({ onClos
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+          <div className="mb-4 grid grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1" role="group" aria-label="依難度篩選戰績">
+            {difficultyFilters.map(({ value, label }) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={difficulty === value}
+                onClick={() => setDifficulty(value)}
+                className={`min-h-10 rounded-lg px-2 text-sm font-bold transition-colors ${difficulty === value
+                  ? 'bg-white text-emerald-700 shadow-xs'
+                  : 'text-slate-600 hover:bg-white/70'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
             <StatCard label="完成場次" value={totalGames} suffix="場" icon={<Target className="h-4 w-4" />} />
             <StatCard label="遊玩人數" value={playerStats.length} suffix="人" icon={<Gamepad2 className="h-4 w-4" />} />
@@ -58,7 +84,7 @@ export const AdminGameStatsModal: React.FC<AdminGameStatsModalProps> = ({ onClos
           {playerStats.length === 0 ? (
             <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-5 py-12 text-center">
               <Gamepad2 className="mx-auto h-8 w-8 text-slate-300" />
-              <div className="mt-3 text-sm font-bold text-slate-700">還沒有完成的對戰</div>
+              <div className="mt-3 text-sm font-bold text-slate-700">這個篩選條件還沒有完成的對戰</div>
               <p className="mt-1 text-xs text-slate-400">隊員打完一場後，這裡會自動顯示勝負統計。</p>
             </div>
           ) : (

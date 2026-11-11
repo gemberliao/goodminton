@@ -82,11 +82,13 @@ export interface MatchLineupConfig {
 }
 
 export type ShuttleGameResultType = 'win' | 'loss';
+export type ShuttleGameDifficulty = 'easy' | 'hard';
 
 export interface ShuttleGameResult {
   id: string;
   user_id: string;
   result: ShuttleGameResultType;
+  difficulty?: ShuttleGameDifficulty; // 舊版紀錄未標記難度，視為困難。
   player_score: number;
   cpu_score: number;
   played_at: string;
@@ -106,13 +108,17 @@ export interface ShopPurchase {
   purchased_at: string;
 }
 
-export type RacketStyle = 'classic' | 'emerald' | 'sunset' | 'gold';
-export type ShuttleStyle = 'classic' | 'sky' | 'rose' | 'neon';
+export type RacketStyle = 'classic' | 'emerald' | 'sunset' | 'gold' | 'lightning' | 'flame' | 'ice' | 'sakura' | 'galaxy';
+export type ShuttleStyle = 'classic' | 'sky' | 'rose' | 'neon' | 'rainbow' | 'meteor' | 'frost' | 'mechanical';
+export type CourtStyle = 'classic' | 'neon' | 'ice' | 'space';
+export type TrailStyle = 'classic' | 'wind' | 'flame' | 'lightning' | 'rainbow' | 'galaxy';
 
 export interface GameLoadout {
   user_id: string;
   racket_style: RacketStyle;
   shuttle_style: ShuttleStyle;
+  court_style?: CourtStyle;
+  trail_style?: TrailStyle;
   updated_at: string;
 }
 

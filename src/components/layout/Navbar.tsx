@@ -267,8 +267,8 @@ export const Navbar: React.FC<Props> = ({ onToggleSidebar, showSidebarToggle = t
       {isGameOpen && (
         <ShuttleSmashGameModal
           onClose={() => setIsGameOpen(false)}
-          onGameComplete={({ winner, playerScore, cpuScore }) => (
-            recordGameResult(winner === 'player' ? 'win' : 'loss', playerScore, cpuScore)
+          onGameComplete={({ winner, playerScore, cpuScore, difficulty }) => (
+            recordGameResult(winner === 'player' ? 'win' : 'loss', playerScore, cpuScore, difficulty)
           )}
         />
       )}
