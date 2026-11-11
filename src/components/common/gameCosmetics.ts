@@ -84,10 +84,6 @@ export function getEquippedStyle(category: CosmeticCategory, loadout?: GameLoado
   return loadout?.[field] ?? 'classic';
 }
 
-export function hasVictoryEffect(item: GameCosmeticItem) {
-  return item.rarity === 4;
-}
-
 interface RacketVisual {
   frame: string;
   handle: string;

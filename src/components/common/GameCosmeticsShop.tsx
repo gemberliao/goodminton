@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Check, Coins, Play, X } from 'lucide-react';
+import { ArrowLeft, Check, Coins, X, Zap } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import {
   COSMETIC_CATEGORIES, COSMETIC_RARITIES, GAME_COSMETIC_ITEMS, getEquippedStyle,
@@ -9,13 +9,12 @@ import {
 interface GameCosmeticsShopProps {
   onBack: () => void;
   onClose: () => void;
-  onTry: (item: GameCosmeticItem) => void;
-  initialCategory: CosmeticCategory;
+  onStart: () => void;
 }
 
-export const GameCosmeticsShop: React.FC<GameCosmeticsShopProps> = ({ onBack, onClose, onTry, initialCategory }) => {
+export const GameCosmeticsShop: React.FC<GameCosmeticsShopProps> = ({ onBack, onClose, onStart }) => {
   const { currentUser, coinWallets, shopPurchases, gameLoadouts, buyShopItem, equipGameItem } = useAppStore();
-  const [category, setCategory] = useState<CosmeticCategory>(initialCategory);
+  const [category, setCategory] = useState<CosmeticCategory>('racket');
   const [workingItemId, setWorkingItemId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -97,15 +96,6 @@ export const GameCosmeticsShop: React.FC<GameCosmeticsShopProps> = ({ onBack, on
                   <span className="pointer-events-none absolute left-1 top-1 rounded bg-slate-950/90 px-1.5 py-0.5 text-[11px] font-semibold text-slate-200">
                     {COSMETIC_RARITIES[item.rarity]}
                   </span>
-                  <button
-                    type="button"
-                    aria-label={`${item.name}，動態試用`}
-                    onClick={() => onTry(item)}
-                    className="absolute bottom-1 right-1 inline-flex min-h-9 items-center gap-1 rounded-lg bg-slate-900/90 px-2 text-xs font-semibold text-slate-100 ring-1 ring-white/15 hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-emerald-300"
-                  >
-                    <Play aria-hidden="true" className="size-3" />
-                    試用
-                  </button>
                 </div>
                 <h3 className="mt-2 break-words text-center text-sm font-black leading-tight text-white">{item.name}</h3>
                 <button
@@ -127,6 +117,17 @@ export const GameCosmeticsShop: React.FC<GameCosmeticsShopProps> = ({ onBack, on
           })}
         </div>
       </div>
+      <footer className="shrink-0 border-t border-white/10 pt-2">
+        <button
+          type="button"
+          onClick={onStart}
+          disabled={workingItemId !== null}
+          className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-400 px-4 text-sm font-black text-slate-950 transition-colors enabled:hover:bg-emerald-300 focus-visible:outline-2 focus-visible:outline-emerald-200 disabled:opacity-60"
+        >
+          <Zap aria-hidden="true" className="h-4 w-4 fill-current" />
+          開始遊戲
+        </button>
+      </footer>
     </section>
   );
 };

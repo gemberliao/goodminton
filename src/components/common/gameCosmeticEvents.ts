@@ -3,17 +3,8 @@ import { GAME_COSMETIC_ITEMS, type CosmeticRarity } from './gameCosmetics';
 
 export type EffectQuality = 'high' | 'medium' | 'low';
 export type EffectEvent = 'hit' | 'smash' | 'score' | 'win';
-export type TrialStage = 'move' | EffectEvent;
-export type TrialMode = TrialStage | 'auto' | 'free' | 'timing';
 export type CosmeticPoint = { x: number; y: number };
 export type CosmeticCourt = CosmeticPoint & { width: number; height: number };
-
-export const TRIAL_STAGES: readonly { id: TrialStage; label: string }[] = [
-  { id: 'move', label: '移動' }, { id: 'hit', label: '擊球' },
-  { id: 'smash', label: '殺球' }, { id: 'score', label: '得分' }, { id: 'win', label: '勝利' },
-];
-export const TRIAL_STAGE_LENGTH = 1750;
-export const TRIAL_EVENT_AT = 470;
 
 const QUALITY_FACTOR: Record<EffectQuality, number> = { high: 1, medium: 0.68, low: 0.38 };
 const EVENT_DURATION: Record<EffectEvent, number> = { hit: 165, smash: 315, score: 590, win: 1150 };

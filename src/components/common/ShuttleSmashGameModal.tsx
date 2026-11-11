@@ -3,15 +3,13 @@ import { Coins, Gamepad2, Pause, Play, RotateCcw, ShoppingBag, Trophy, X, Zap } 
 import { useAppStore } from '../../store/useAppStore';
 import type { SyncResult } from '../../lib/supabaseErrors';
 import { GameCosmeticsShop } from './GameCosmeticsShop';
-import { GameCosmeticTryout } from './GameCosmeticTryout';
-import { COURT_VISUALS, hasVictoryEffect, RACKET_VISUALS, SHUTTLE_VISUALS, type CosmeticCategory, type GameCosmeticItem } from './gameCosmetics';
+import { COURT_VISUALS, RACKET_VISUALS, SHUTTLE_VISUALS } from './gameCosmetics';
 import {
   drawCourtDecoration, drawFlightTrail, drawRacketAccent, drawShuttleAccent, drawTrailTimingTarget,
   getFlightTrailWindow,
 } from './gameCosmeticEffects';
 import {
-  CosmeticEvents, drawRacketMotion, TRIAL_EVENT_AT, TRIAL_STAGES, TRIAL_STAGE_LENGTH,
-  type EffectQuality, type TrialMode, type TrialStage,
+  CosmeticEvents, drawRacketMotion, type EffectQuality,
 } from './gameCosmeticEvents';
 import { FlightHistory } from './gameFlightHistory';
 import type { CourtStyle, RacketStyle, ShuttleGameDifficulty, ShuttleStyle, TrailStyle } from '../../types';
@@ -25,15 +23,6 @@ type IncomingQualityBand = 'bad' | 'normal' | 'good';
 type ShotType = 'clear' | 'drop' | 'smash' | 'drive' | 'push' | 'block' | 'half-smash' | 'net-shot' | 'lift' | 'net-kill';
 
 const EFFECT_QUALITY = 'high';
-const AUTO_TRIAL_STAGES = TRIAL_STAGES.map(({ id }) => id);
-
-interface TryoutState {
-  mode: TrialMode;
-  startedAt: number;
-  stageNumber: number;
-  playedEvent: boolean;
-  hasVictory: boolean;
-}
 
 const GAME_DIFFICULTIES = [
   { value: 'easy', label: '簡單' },
@@ -662,17 +651,12 @@ const GameIntroBackground = () => {
 export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ onClose, onGameComplete }) => {
   const currentUserId = useAppStore((state) => state.currentUser.id);
   const equippedLoadout = useAppStore((state) => state.gameLoadouts.find((loadout) => loadout.user_id === state.currentUser.id));
-  const [trialItem, setTrialItem] = useState<GameCosmeticItem | null>(null);
-  const [trialMode, setTrialMode] = useState<TrialMode>('move');
-  const [trialStage, setTrialStage] = useState<TrialStage>('move');
-  const [shopCategory, setShopCategory] = useState<CosmeticCategory>('racket');
-  const trialRef = useRef<TryoutState | null>(null);
   const [effects] = useState(() => new CosmeticEvents());
   const [flightHistory] = useState(() => new FlightHistory());
-  const equippedRacketStyle = trialItem?.category === 'racket' ? trialItem.style as RacketStyle : equippedLoadout?.racket_style || 'classic';
-  const equippedShuttleStyle = trialItem?.category === 'shuttle' ? trialItem.style as ShuttleStyle : equippedLoadout?.shuttle_style || 'classic';
-  const equippedCourtStyle = trialItem?.category === 'court' ? trialItem.style as CourtStyle : equippedLoadout?.court_style || 'classic';
-  const equippedTrailStyle = trialItem?.category === 'trail' ? trialItem.style as TrailStyle : equippedLoadout?.trail_style || 'classic';
+  const equippedRacketStyle = equippedLoadout?.racket_style || 'classic';
+  const equippedShuttleStyle = equippedLoadout?.shuttle_style || 'classic';
+  const equippedCourtStyle = equippedLoadout?.court_style || 'classic';
+  const equippedTrailStyle = equippedLoadout?.trail_style || 'classic';
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef(0);
   const activeTouchRef = useRef<{ pointerId: number; sample: DragSample | null } | null>(null);
@@ -895,38 +879,9 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
     setPhase('playing');
   };
 
-  const startTryout = (item: GameCosmeticItem, mode: TrialMode) => {
-    trialRef.current = { mode, startedAt: performance.now(), stageNumber: -1, playedEvent: false, hasVictory: hasVictoryEffect(item) };
-    setTrialItem(item);
-    setTrialMode(mode);
-    setShopCategory(item.category);
-    setResultSaveError('');
-    if (mode === 'free') {
-      startGame();
-    } else {
-      phaseRef.current = 'playing';
-      setPhase('playing');
-      setWaitingForServe(false);
-    }
-  };
-
-  const leaveTryout = () => {
-    trialRef.current = null;
-    effects.reset();
-    flightHistory.reset();
-    activeTouchRef.current = null;
-    touchSweepsRef.current = [];
-    setTrialItem(null);
-    phaseRef.current = 'ready';
-    setPhase('ready');
-  };
-
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        if (trialRef.current) leaveTryout();
-        else onClose();
-      }
+      if (event.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => {
@@ -1024,7 +979,6 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
         setWaitingForServe(false);
         setWinner(nextWinner);
         setPhase('finished');
-        if (trialRef.current) return;
         const finishedMatch = matchNumberRef.current;
         void onGameCompleteRef.current?.({
           winner: nextWinner,
@@ -2041,7 +1995,7 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
       ctx.restore();
     };
 
-    const draw = (now: number, effectNow = now) => {
+    const draw = (now: number) => {
       const rect = canvas.getBoundingClientRect();
       const width = Math.max(1, rect.width);
       const height = Math.max(1, rect.height);
@@ -2215,7 +2169,7 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
           focus: 1 - timingDistance,
           state,
           classicEmphasis,
-          now: effectNow,
+          now,
           quality,
         });
       };
@@ -2389,153 +2343,13 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
       }
     };
 
-    const demoMotion: DragSample[] = [
-      { at: 0, courtX: 0.2, courtY: 0.5 },
-      { at: 0, courtX: 0.2, courtY: 0.5 },
-    ];
-
-    const resetTryoutStage = (trial: TryoutState, stageNumber: number) => {
-      trial.stageNumber = stageNumber;
-      trial.playedEvent = false;
-      effects.reset();
-      flightHistory.reset();
-      arenaRef.current.classicTrail.length = 0;
-      arenaRef.current.hitAt = 0;
-      setPlayerScore(0);
-      setCpuScore(0);
-    };
-
-    const playTimingTryoutFrame = (now: number, trial: TryoutState) => {
-      const arena = arenaRef.current;
-      const cycleDuration = 1880;
-      const cycle = Math.floor(Math.max(0, now - trial.startedAt) / cycleDuration);
-      const start = trial.startedAt + cycle * cycleDuration;
-      if (trial.stageNumber !== cycle) resetTryoutStage(trial, cycle);
-
-      arena.flightStartedAt = start + 110;
-      arena.flightDuration = 1050;
-      arena.flightStartX = 0.84;
-      arena.flightStartY = 0.32;
-      arena.landingX = 0.33;
-      arena.landingY = 0.62;
-      arena.landingCircleX = arena.landingX;
-      arena.landingCircleY = arena.landingY;
-      arena.landingSlideStartedAt = 0;
-      arena.receiver = 'player';
-      arena.incomingShotQuality = 0.5;
-      arena.shotWasPowerTiming = cycle % 3 === 2;
-      arena.rallyStrokeCount = cycle % 3 === 0 ? 0 : 2;
-      arena.shotType = arena.shotWasPowerTiming ? 'smash' : 'drive';
-      arena.shotArcScale = 0.64;
-      arena.waitingForServe = false;
-      arena.shakeUntil = 0;
-      arena.rallyPressure = 0;
-      arena.dragSamples = [];
-      arena.playerX = 0.16;
-      arena.playerY = 0.36;
-      arena.cpuX = 0.87;
-      arena.cpuY = 0.32;
-
-      // Hold the timing window briefly in the demo so its colors can be compared.
-      const optimal = getPredictedOptimalHitTime(arena);
-      const playhead = Math.min(now, optimal) + Math.max(0, now - optimal - 500);
-      const progress = clamp((playhead - arena.flightStartedAt) / arena.flightDuration, 0, 1);
-      arena.canBeHit = playhead >= arena.flightStartedAt && progress < 1;
-      arena.shuttle.x = lerp(arena.flightStartX, arena.landingX, progress);
-      arena.shuttle.y = lerp(arena.flightStartY, arena.landingY, progress);
-      arena.shuttle.vx = progress < 1 ? (arena.landingX - arena.flightStartX) / 1.05 : 0;
-      arena.shuttle.vy = progress < 1 ? (arena.landingY - arena.flightStartY) / 1.05 : 0;
-      if (arena.canBeHit && playhead !== optimal) sampleClassicTrail(arena);
-      return playhead;
-    };
-
-    const playTryoutFrame = (now: number, trial: TryoutState, mode: Exclude<TrialMode, 'free' | 'timing'>) => {
-      const arena = arenaRef.current;
-      const elapsed = Math.max(0, now - trial.startedAt);
-      const stageNumber = Math.floor(elapsed / TRIAL_STAGE_LENGTH);
-      const stageStart = trial.startedAt + stageNumber * TRIAL_STAGE_LENGTH;
-      const age = elapsed % TRIAL_STAGE_LENGTH;
-      const stage = mode === 'auto' ? AUTO_TRIAL_STAGES[stageNumber % (trial.hasVictory ? 5 : 4)] : mode;
-      if (stageNumber !== trial.stageNumber) {
-        resetTryoutStage(trial, stageNumber);
-        setTrialStage(stage);
-      }
-
-      // Each stage runs on the normal court with a repeatable flight for comparison.
-      const launchAge = stage === 'score' ? 90 : stage === 'move' ? 130 : TRIAL_EVENT_AT;
-      const duration = stage === 'smash' ? 395 : stage === 'score' ? TRIAL_EVENT_AT - launchAge : 780;
-      const progress = stage === 'win' ? 0 : clamp((age - launchAge) / duration, 0, 1);
-      arena.shakeUntil = 0;
-      arena.lastShotQuality = stage === 'smash' ? 'perfect' : 'normal';
-      arena.lastHitPerfect = stage === 'smash';
-      arena.lastHitDefensivePerfect = false;
-      arena.lastHitSmash = stage === 'smash';
-      arena.shotWasPowerTiming = stage === 'smash';
-      arena.shotType = stage === 'smash' ? 'smash' : 'drive';
-      arena.shotArcScale = stage === 'smash' ? 0.24 : 0.64;
-      arena.rallyPressure = 0;
-      arena.flightStartX = 0.23;
-      arena.flightStartY = 0.32;
-      arena.landingX = 0.82;
-      arena.landingY = 0.67;
-      arena.flightStartedAt = age >= launchAge && stage !== 'win' ? stageStart + launchAge : Infinity;
-      arena.flightDuration = duration;
-      arena.shuttle.x = lerp(arena.flightStartX, arena.landingX, progress);
-      arena.shuttle.y = lerp(arena.flightStartY, arena.landingY, progress);
-      arena.shuttle.vx = progress < 1 ? (arena.landingX - arena.flightStartX) / (duration / 1000) : 0;
-      arena.shuttle.vy = progress < 1 ? (arena.landingY - arena.flightStartY) / (duration / 1000) : 0;
-      arena.landingSlideStartedAt = progress === 1 ? arena.flightStartedAt + duration : 0;
-      if (progress > 0 && progress < 1) sampleClassicTrail(arena);
-      arena.canBeHit = false;
-      arena.waitingForServe = false;
-      arena.receiver = 'cpu';
-      arena.cpuX = 0.86;
-      arena.cpuY = 0.67;
-
-      const racketX = (t: number) => stage === 'move' ? 0.21 + Math.sin(t / 210) * 0.055 : 0.23;
-      const racketY = (t: number) => stage === 'move'
-        ? 0.48 + Math.sin(t / 225 - 0.5) * 0.25
-        : lerp(0.52, 0.32, t / TRIAL_EVENT_AT);
-      arena.playerX = racketX(age);
-      arena.playerY = racketY(age);
-      demoMotion[0].at = now - 24;
-      demoMotion[0].courtX = racketX(age - 24);
-      demoMotion[0].courtY = racketY(age - 24);
-      demoMotion[1].at = now;
-      demoMotion[1].courtX = arena.playerX;
-      demoMotion[1].courtY = arena.playerY;
-      arena.dragSamples = demoMotion;
-
-      if (!trial.playedEvent && stage !== 'move' && age >= TRIAL_EVENT_AT) {
-        trial.playedEvent = true;
-        const eventAt = stageStart + TRIAL_EVENT_AT;
-        const score = stage === 'score' || stage === 'win';
-        const x = score ? arena.landingX : arena.flightStartX;
-        const y = score ? arena.landingY : arena.flightStartY;
-        effects.emit(stage, eventAt, x, y, true, arena.shuttle.vx, arena.shuttle.vy);
-        if (score) {
-          setPlayerScore(stage === 'win' ? 3 : 1);
-        } else {
-          arena.hitAt = eventAt;
-          arena.hitX = x;
-          arena.hitY = y;
-        }
-      }
-    };
-
     const loop = (now: number) => {
       if (phaseRef.current !== 'ready') {
         const arena = arenaRef.current;
         const delta = arena.lastTime ? now - arena.lastTime : 16.67;
         arena.lastTime = now;
-        const trial = trialRef.current;
-        if (trial?.mode === 'timing') {
-          draw(playTimingTryoutFrame(now, trial), now);
-        } else {
-          if (trial && trial.mode !== 'free') playTryoutFrame(now, trial, trial.mode);
-          else update(now, delta);
-          draw(now);
-        }
+        update(now, delta);
+        draw(now);
       }
       frameRef.current = window.requestAnimationFrame(loop);
     };
@@ -2552,7 +2366,6 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
 
   const movePlayerToPointer = (event: React.PointerEvent<HTMLCanvasElement>) => {
     if (phaseRef.current !== 'playing') return;
-    if (trialRef.current && trialRef.current.mode !== 'free') return;
     const touch = event.pointerType === 'touch' ? activeTouchRef.current : null;
     if (event.pointerType === 'touch' && touch?.pointerId !== event.pointerId) return;
 
@@ -2590,7 +2403,6 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
 
   const handleCourtPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
     if (phaseRef.current !== 'playing') return;
-    if (trialRef.current && trialRef.current.mode !== 'free') return;
     const arena = arenaRef.current;
     const isTouch = event.pointerType === 'touch';
     if (isTouch) {
@@ -2624,17 +2436,13 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
     <div className="fixed inset-0 z-[90] bg-slate-950" role="dialog" aria-modal="true" aria-label="羽球電腦對戰">
       <div className="shuttle-game-modal relative h-full w-full overflow-hidden bg-slate-950 text-white">
         <div className={`flex h-full flex-col ${phase === 'ready' ? 'invisible' : ''}`}>
-          {trialItem && (
-            <GameCosmeticTryout item={trialItem} mode={trialMode} stage={trialStage}
-              onMode={mode => startTryout(trialItem, mode)} onBack={leaveTryout} />
-          )}
           <div className="shrink-0 grid grid-cols-3 items-center border-b border-white/10 bg-slate-950 px-4 py-2">
             <div className="flex items-center gap-2 text-sky-300">
               <span className="text-xs font-black">你</span>
               <span className="text-2xl font-black tabular-nums text-white">{playerScore}</span>
             </div>
             <div className="text-center text-[10px] font-bold tracking-wider text-slate-400">
-              {trialItem ? '試用・不計戰績' : `${difficultyLabel}・先到 3 分`}
+              {difficultyLabel}・先到 3 分
             </div>
             <div className="flex items-center justify-end gap-2 text-rose-300">
               <span className="text-2xl font-black tabular-nums text-white">{cpuScore}</span>
@@ -2654,13 +2462,14 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
               aria-label="羽球對戰球場；滑鼠游標或手指位置就是球拍，讓球拍直接碰到羽球完成擊球"
             />
 
-            {!trialItem && (
-              <div className="absolute right-3 top-3 z-20">
-                <button type="button" onClick={onClose} className="rounded-md bg-slate-950/55 p-2 text-slate-300 transition-colors hover:bg-slate-950/80 hover:text-white" aria-label="關閉遊戲">
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="absolute right-3 top-3 z-30 grid size-11 place-items-center rounded-xl bg-slate-950/75 text-slate-200 transition-colors hover:bg-slate-950 hover:text-white focus-visible:outline-2 focus-visible:outline-emerald-400"
+              aria-label="關閉遊戲"
+            >
+              <X aria-hidden="true" className="h-5 w-5" />
+            </button>
 
             {phase === 'playing' && waitingForServe && (
               <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
@@ -2672,11 +2481,11 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
               <div className={`absolute inset-0 z-20 flex items-center justify-center p-5 ${winner === 'player' && (equippedCourtStyle === 'space' || equippedRacketStyle === 'galaxy') ? 'bg-slate-950/35' : 'bg-slate-950/65 backdrop-blur-[2px]'}`}>
                 <div className="flex w-full max-w-xs flex-col items-center text-center">
                   <Trophy className={`h-8 w-8 ${winner === 'player' ? 'text-amber-300' : 'text-slate-400'}`} />
-                  <h2 className="mt-3 text-3xl font-black">{trialItem ? '試玩結束' : winner === 'player' ? '你贏了！' : '電腦獲勝'}</h2>
+                  <h2 className="mt-3 text-3xl font-black">{winner === 'player' ? '你贏了！' : '電腦獲勝'}</h2>
                   <p className="mt-2 text-sm text-slate-300">
                     {difficultyLabel}模式・最終比分 <span className="ml-1 font-black tabular-nums text-white">{playerScore}：{cpuScore}</span>
                   </p>
-                  {!trialItem && winner === 'player' && !resultSaveError && (
+                  {winner === 'player' && !resultSaveError && (
                     <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-amber-300/15 px-3 py-1.5 text-sm font-bold text-amber-200">
                       <Coins aria-hidden="true" className="h-4 w-4" />
                       勝場獎勵 +{WIN_REWARD_COINS[matchDifficultyRef.current]} 枚金幣
@@ -2684,33 +2493,31 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
                   )}
                   {resultSaveError && <p role="alert" className="mt-3 text-xs text-rose-300">{resultSaveError}</p>}
                   <div className="mt-6 flex w-full max-w-xs gap-2">
-                    <button type="button" onClick={trialItem ? leaveTryout : onClose} className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-white/15 bg-slate-950/55 px-5 py-3.5 text-sm font-black text-white transition-colors hover:bg-white/10 active:scale-95">
+                    <button type="button" onClick={onClose} className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-white/15 bg-slate-950/55 px-5 py-3.5 text-sm font-black text-white transition-colors hover:bg-white/10 active:scale-95">
                       <X className="h-4 w-4" />
-                      <span>{trialItem ? '回商店' : '退出遊戲'}</span>
+                      <span>退出遊戲</span>
                     </button>
                     <button type="button" onClick={startGame} className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-400 px-5 py-3.5 text-sm font-black text-slate-950 transition-colors hover:bg-emerald-300 active:scale-95">
                       <RotateCcw className="h-4 w-4" />
                       <span>再戰一場</span>
                     </button>
                   </div>
-                  {!trialItem && (
-                    <div className="mt-2 grid w-full grid-cols-2 gap-2">
-                      <button type="button" onClick={() => {
-                        phaseRef.current = 'ready';
-                        setPhase('ready');
-                      }} className="min-h-11 rounded-xl border border-white/15 bg-slate-950/55 text-sm font-bold text-slate-300 hover:bg-white/10 hover:text-white">
-                        切換難度
-                      </button>
-                      <button type="button" onClick={() => {
-                        setIsShopOpen(true);
-                        phaseRef.current = 'ready';
-                        setPhase('ready');
-                      }} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/15 bg-slate-950/55 text-sm font-bold text-white hover:bg-white/10">
-                        <ShoppingBag aria-hidden="true" className="h-4 w-4 text-amber-300" />
-                        換造型
-                      </button>
-                    </div>
-                  )}
+                  <div className="mt-2 grid w-full grid-cols-2 gap-2">
+                    <button type="button" onClick={() => {
+                      phaseRef.current = 'ready';
+                      setPhase('ready');
+                    }} className="min-h-11 rounded-xl border border-white/15 bg-slate-950/55 text-sm font-bold text-slate-300 hover:bg-white/10 hover:text-white">
+                      切換難度
+                    </button>
+                    <button type="button" onClick={() => {
+                      setIsShopOpen(true);
+                      phaseRef.current = 'ready';
+                      setPhase('ready');
+                    }} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/15 bg-slate-950/55 text-sm font-bold text-white hover:bg-white/10">
+                      <ShoppingBag aria-hidden="true" className="h-4 w-4 text-amber-300" />
+                      換造型
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -2720,7 +2527,10 @@ export const ShuttleSmashGameModal: React.FC<ShuttleSmashGameModalProps> = ({ on
         {phase === 'ready' && (isShopOpen ? (
           <div className="absolute inset-0 z-30">
             <GameCosmeticsShop onBack={() => setIsShopOpen(false)} onClose={onClose}
-              initialCategory={shopCategory} onTry={item => startTryout(item, item.category === 'trail' ? 'timing' : 'move')} />
+              onStart={() => {
+                setIsShopOpen(false);
+                startGame();
+              }} />
           </div>
         ) : (
           <div className="absolute inset-0 z-30 bg-slate-950">
